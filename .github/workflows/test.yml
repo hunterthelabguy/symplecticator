@@ -1,0 +1,33 @@
+# The two script suites, on Linux and on macOS. macOS is the point: its stock bash 3.2, missing timeout and
+# gtimeout, and BSD touch are the paths the scripts' portability fixes take, and no Mac had run them before.
+# A suite's own skips (no cygpath; gh sharing a folder with git) stay skips; any FAIL fails the job.
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  suites:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      # gh signed in with this job's read-only token, so the jq verdict checks run rather than skip.
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bash and probe limiter in use
+        run: |
+          bash --version | head -n 1
+          for t in timeout gtimeout; do echo "$t: $(command -v "$t" || echo absent)"; done
+      - run: bash scripts/ground-truth.test.sh
+      - if: ${{ !cancelled() }}
+        run: bash scripts/build-stop-gate.test.sh
