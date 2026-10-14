@@ -1,0 +1,30 @@
+{
+  "cleanupPeriodDays": "FILL IN: a positive whole number of days",
+  "promptCacheTtl": "FILL IN: 1h or 5m, or leave this key out",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "echo 'Context was compacted or resumed. Before acting on anything remembered from earlier in this session, run bash ~/.claude/scripts/ground-truth.sh on the repos this session touched and report where it contradicts what you remember.'"
+          }
+        ]
+      }
+    ]
+  },
+  "autoMode": {
+    "environment": [
+      "**Source control**: FILL IN: GitHub, the user's own account `<account>` (github.com/<account>/*). Commit identity: <name> <email>",
+      "**Trusted repos**: FILL IN: the user's own git repos under ~, local-only or with a github.com/<account>/* remote; pushing to that remote is routine",
+      "**Primary use of Claude Code**: FILL IN (for example, computational physics research code)",
+      "Routine under the user's own prefix: FILL IN: github.com/<account>/*"
+    ]
+  }
+}
