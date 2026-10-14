@@ -96,12 +96,12 @@ result with the spec's intent, with
 returns the fixes it needed as a patch of `T<n> as written` and `F<k>:`
 commits. Fold its findings into a revision, copying mechanical fixes from
 the patch, one commit per fold with the patch folder; raise any finding
-that changes behaviour or needs a decision to the owner directly. Fixed point: if the pass found
-anything, run it again on the revision with a fresh context (different model
-or effort); stop at the first clean pass; cap three. A plan is ready for
-`/build` only after a clean pass, with every report attached. If the third
-pass still finds something, stop: hand the plan and every report to the owner;
-it is not ready for `/build overnight`.
+that changes behaviour or needs a decision to the owner directly. Fixed
+point: if the pass found anything, run it again on the revision with a fresh
+context (different model or effort); stop at the first clean pass; cap
+three. A plan is ready for `/build` only after a clean pass, with every
+report attached. If the third pass still finds something, stop: hand the
+plan and every report to the owner; it is not ready for `/build overnight`.
 
 ## Overnight readiness
 
