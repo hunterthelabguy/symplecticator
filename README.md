@@ -211,8 +211,9 @@ own `CLAUDE.md` for these, and ask when one is missing:
 - **Clearing review:** the final review before merge, by a fresh context that
   wrote none of the diff; it names the commit it read, and any later commit
   voids it. It clears on no blocker and no major finding.
-- **Delta review:** a clearing review of one fix commit and the code around
-  what it changed, allowed once a clearing review has read the whole diff.
+- **Delta review:** a clearing review of only the commits since the last
+  reviewed head and the code around what they changed. You can pick one, in
+  an attended run, once a clearing review has read the whole diff.
 - **Seam:** the public boundary a test targets.
 - **Retro line:** one line in a pull request body recording what a review
   or simplify pass found; `/reflect` promotes the instructive ones into the

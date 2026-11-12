@@ -153,7 +153,9 @@ it voids it.
    - **Not cleared:** one implementer pass on the blockers and majors only,
      reviewed like a task, full verify green, then a new clearing review on
      the new head; at most three rounds, then stop, report, and still do
-     steps 5 to 7 with the PR marked uncleared.
+     steps 5 to 7 with the PR marked uncleared. That round's minor findings
+     and nits are listed for the owner too (next bullet); the fix pass
+     takes one only when the owner rules it in.
    - **Cleared with minor findings or nits:** no fix round. List them in
      the PR body under "Left for the owner", each with its file and line;
      the owner rules on them at merge. Fixing one is a new commit, which
@@ -162,17 +164,23 @@ it voids it.
      the body, which is not a commit.
    - **A defect that a fix round made** is a major, whatever its size.
    - **Delta review:** once one clearing review has read the whole diff, a
-     later round may read only the fix commit and every caller and callee
-     of what it changed. Attended, this is the cost gate's "lighter" and
-     the owner picks it; **[overnight]** every round reads the whole diff.
-     The PR body then says that no single review read the whole head, and
-     the Review line names the scope in its reviewer part, as in
-     `Review: delta review at <sha>`: the ground-truth script takes the
-     last commit id on that line as the commit reviewed.
+     later round may read only the diff from the last reviewed head to the
+     new head, and every caller and callee of what it changed. It is handed
+     the earlier round's blockers and majors and confirms each one closed;
+     one still open keeps its grade. Only the owner picks a delta review:
+     attended, at the cost gate as "lighter" or by asking for one;
+     **[overnight]** every round reads the whole diff. The PR body then
+     says, on a line of its own, that no single review read the whole head.
 
    When it clears, put `Review: <reviewer> at <sha>` in the PR body
    (editing the PR body is not a commit), plus what it caught that the
-   simplify pass missed, for the retro line.
+   simplify pass missed, for the retro line. The ground-truth script and
+   the Stop hook read only a line that starts with `Review: ` and ends with
+   `at <sha>`, and the script takes the last such line in the body. So the
+   newest review's line goes last, or the PR reads `review STALE`; a delta
+   review names its scope before "at", as in
+   `Review: delta review at <sha>`; and no words follow the commit id, or
+   the PR reads `no Review line`.
 5. Link the report in the draft PR, and put the resume block in its body:
    `/handoff` step 4 form, written from the ground-truth script's output at
    the head. Its task is for the next agent: run the ground truth, confirm
