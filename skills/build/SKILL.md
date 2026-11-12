@@ -159,9 +159,11 @@ it voids it.
    owner word. On an uncleared run the State says why it stopped, and the
    task is the next piece of work: fix the findings or the red verify and
    get a fresh clearing review, unless the owner's merge-anyway call is quoted
-   in the PR. The PR stays a draft until the owner marks it ready
-   and merges it on a cleared head (the block's Ground truth line shows it;
-   `/handoff` checks the same Review line when it does the landing).
+   in the PR. The PR stays a draft until the owner marks it ready. It is
+   merged on a cleared head (the block's Ground truth line shows it;
+   `/handoff` checks the same Review line when it does the landing), by the
+   owner, or by Claude on the owner's word for that PR, quoted in the PR.
+   This run never merges it.
 6. Remove the task worktrees.
 7. End with the block as the final message, cleared or not. The Stop hook
    in this skill's frontmatter (`~/.claude/scripts/build-stop-gate.sh`)

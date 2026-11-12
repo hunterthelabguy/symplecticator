@@ -34,7 +34,8 @@ rewriting, without losing what the idea was for.
    final commit, by name, and may use Claude Code's own `code-review` skill.
    Any later commit voids its clearance.
 7. **Draft pull request.** You read the report, rule on anything it raised,
-   and merge.
+   and merge, or tell Claude to merge that pull request. Claude never merges
+   one on its own.
 
 Two rules run through every step. *Independence:* each critic, simplifier
 and reviewer starts from a fresh context, so it cannot inherit the blind
