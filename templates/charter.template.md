@@ -96,7 +96,10 @@ skills cite items by number (for example "floor item 4"). -->
    break reverts the pass), verify green again, a final clearing review by a
    fresh context that wrote none of the diff, draft PR. The clearing review
    names the commit it read; any later commit voids it. A self-review can
-   inform the work; only the clearing review clears it for merge.
+   inform the work; only the clearing review clears it for merge. It clears
+   on no blocker and no major finding. Only those, or a defect a fix made,
+   start another round (cap three); lesser findings are listed for the
+   owner, not fixed first.
    Deterministic first: type system, test, tool, then agent; tools
    enumerate, agents adjudicate citing the spec line. Clean is a valid result
    and carries its evidence.

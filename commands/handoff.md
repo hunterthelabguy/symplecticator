@@ -49,7 +49,10 @@ stop and ask.
    Missing or stale: stop and ask for a fresh clearing review by a context that
    wrote none of the diff (the cost gate applies). A skipped review stays
    marked uncleared in the PR body, and merging it anyway is the owner's
-   explicit call, quoted there.
+   explicit call, quoted there. A cleared PR may list findings "Left for the
+   owner": any the owner has not ruled on by the merge go into the repo's
+   living plan as open questions, or into this handoff's Awaiting owner word
+   where the repo has no living plan, so they outlive the PR.
 6. Follow the landing rule exactly: open the PR, watch checks to green, merge by the
    named method, sync main. Never merge before checks report. Where the rule allows
    direct landing for ruled spec/docs commits, use it only for those.

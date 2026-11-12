@@ -144,18 +144,41 @@ it voids it.
    the progress file. Commit both and push.
 4. **Final clearing review**, by a fresh subagent that wrote none of the
    diff (it may run Claude Code's bundled code-review skill), on the branch
-   against base at the head commit. Findings: one implementer pass reviewed
-   like a task, full verify green, then a new clearing review on the new head;
-   at most three rounds, then stop, report, and still do steps 5 to 7 with
-   the PR marked uncleared. When it clears, put
-   `Review: <reviewer> at <sha>` in the PR body (editing the PR body is not a
-   commit), plus what it caught that the simplify pass missed, for the retro
-   line.
+   against base at the head commit, with
+   [clearing-review-examples.md](clearing-review-examples.md) loaded. It
+   grades every finding blocker, major, minor or nit, and it clears when
+   there is no blocker and no major. These are major at least: a spec line
+   the code does not meet, a spec number no test pins, a false claim in the
+   PR body.
+   - **Not cleared:** one implementer pass on the blockers and majors only,
+     reviewed like a task, full verify green, then a new clearing review on
+     the new head; at most three rounds, then stop, report, and still do
+     steps 5 to 7 with the PR marked uncleared.
+   - **Cleared with minor findings or nits:** no fix round. List them in
+     the PR body under "Left for the owner", each with its file and line;
+     the owner rules on them at merge. Fixing one is a new commit, which
+     voids the review and buys another, and a review at this depth rarely
+     comes back empty. A wrong claim in the PR body is corrected by editing
+     the body, which is not a commit.
+   - **A defect that a fix round made** is a major, whatever its size.
+   - **Delta review:** once one clearing review has read the whole diff, a
+     later round may read only the fix commit and every caller and callee
+     of what it changed. Attended, this is the cost gate's "lighter" and
+     the owner picks it; **[overnight]** every round reads the whole diff.
+     The PR body then says that no single review read the whole head, and
+     the Review line names the scope in its reviewer part, as in
+     `Review: delta review at <sha>`: the ground-truth script takes the
+     last commit id on that line as the commit reviewed.
+
+   When it clears, put `Review: <reviewer> at <sha>` in the PR body
+   (editing the PR body is not a commit), plus what it caught that the
+   simplify pass missed, for the retro line.
 5. Link the report in the draft PR, and put the resume block in its body:
    `/handoff` step 4 form, written from the ground-truth script's output at
    the head. Its task is for the next agent: run the ground truth, confirm
-   the PR reads cleared at head, walk the owner through the report, and apply
-   its proposed edits once the owner has merged; the merge goes under Awaiting
+   the PR reads cleared at head, walk the owner through the report and the
+   findings left for the owner, and apply its proposed edits once the owner
+   has merged; the merge goes under Awaiting
    owner word. On an uncleared run the State says why it stopped, and the
    task is the next piece of work: fix the findings or the red verify and
    get a fresh clearing review, unless the owner's merge-anyway call is quoted
