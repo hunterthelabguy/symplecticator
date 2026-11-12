@@ -166,8 +166,9 @@ it voids it.
    - **Delta review:** once one clearing review has read the whole diff, a
      later round may read only the diff from the last reviewed head to the
      new head, and every caller and callee of what it changed. It is handed
-     the earlier round's blockers and majors and confirms each one closed;
-     one still open keeps its grade. Only the owner picks a delta review:
+     the earlier round's blockers and majors, and any lesser finding the
+     owner ruled into the fix, and confirms each one closed; one still open
+     keeps its grade. Only the owner picks a delta review:
      attended, at the cost gate as "lighter" or by asking for one;
      **[overnight]** every round reads the whole diff. The PR body then
      says, on a line of its own, that no single review read the whole head.
@@ -177,16 +178,18 @@ it voids it.
    simplify pass missed, for the retro line. The ground-truth script and
    the Stop hook read only a line that starts with `Review: ` and ends with
    `at <sha>`, and the script takes the last such line in the body. So the
-   newest review's line goes last, or the PR reads `review STALE`; a delta
-   review names its scope before "at", as in
-   `Review: delta review at <sha>`; and no words follow the commit id, or
-   the PR reads `no Review line`.
+   newest review's line goes last; a delta review names its scope before
+   "at", as in `Review: delta review at <sha>`; and no words follow the
+   commit id. A line that does not fit is not read at all, as if it were
+   absent.
 5. Link the report in the draft PR, and put the resume block in its body:
    `/handoff` step 4 form, written from the ground-truth script's output at
    the head. Its task is for the next agent: run the ground truth, confirm
    the PR reads cleared at head, walk the owner through the report and the
-   findings left for the owner, and apply its proposed edits once the owner
-   has merged; the merge goes under Awaiting
+   findings left for the owner, and once the owner has merged, apply its
+   proposed edits and route any of those findings the owner has not ruled
+   on as `/handoff` step 3 does after a merge (into the living plan, or
+   Awaiting owner word where there is none); the merge goes under Awaiting
    owner word. On an uncleared run the State says why it stopped, and the
    task is the next piece of work: fix the findings or the red verify and
    get a fresh clearing review, unless the owner's merge-anyway call is quoted
