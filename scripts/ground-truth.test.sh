@@ -19,8 +19,22 @@ trap 'rm -rf "$T"' EXIT
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test
 
 failures=0 skipped=0
+# A failed check prints what it tested: the command (for red and green that holds the script's exit code), the
+# command's own exit code (grep and awk give 1 for text that is not there and 2 or more when they could not run), and
+# the output file the command read, if it read one. The temp directory is gone once the suite ends, so nothing else
+# is left to read after a failure that does not come back.
 check() { # <what> <command...>
-  if "${@:2}"; then echo "ok    $1"; else echo "FAIL  $1"; failures=$((failures + 1)); fi
+  local own=0
+  "${@:2}" || own=$?
+  if [ "$own" = 0 ]; then echo "ok    $1"; return; fi
+  echo "FAIL  $1"
+  failures=$((failures + 1))
+  echo "      ! exit $own from: ${*:2}"
+  case ${3:-} in
+    "$T"/*)
+      if [ -f "$3" ] && [ -s "$3" ]; then sed 's/^/      ! /' "$3"; else echo "      ! (no such file, or an empty one)"; fi
+      ;;
+  esac
 }
 has() { grep -qF -- "$2" "$1"; }    # <file> <text>
 lacks() { ! grep -qF -- "$2" "$1"; } # <file> <text>
