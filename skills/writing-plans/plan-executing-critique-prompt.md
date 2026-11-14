@@ -91,9 +91,10 @@ Subagent (general-purpose, strongest model, effort high):
     and the servers you stopped. No file writes in the repo.
 ```
 
-**After the report:** the plan author folds the findings into a revision,
-copying each mechanical fix from the patch into the plan's code blocks
-(judging the label, merging by hand where a block is a fragment);
+**After the report:** a fresh context folds the findings into a revision,
+never the resumed drafter (see the fold rule in SKILL.md), copying each
+mechanical fix from the patch into the plan's code blocks (judging the
+label, merging by hand where a block is a fragment);
 needs-ruling fixes enter only after the owner rules. The fold is committed on
 its own with the patch folder, staged by path, never `git add -A` (a synced
 folder can hold conflict files), so the next critique's revision check diffs

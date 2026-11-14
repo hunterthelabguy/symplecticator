@@ -1,5 +1,9 @@
 # The Symplecticator
 
+[![test](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml)
+(the scripts' two test suites on Ubuntu and macOS; the skills themselves are
+prose and have no tests)
+
 A Claude Code configuration for anyone who writes code with Claude: the
 Symplecticator pipeline (below), plus the skills, commands and setup
 interview around it, which writes your own charter. It was first built for
