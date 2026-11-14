@@ -104,8 +104,8 @@ folds of one plan once ran 585k, 754k, 818k and 888k tokens, and the
 plan's route came to more than three times the top of its estimate).
 Fixed point: if the pass found anything, run it again on the revision
 with a fresh context (different model or effort); stop at the first
-clean pass; cap three. A plan is ready for `/build` only after a clean pass, with every report attached. If the third
-pass still finds something, stop: hand the plan and every report to the owner;
+clean pass; cap three. A plan is ready for `/build` only after a clean
+pass, with every report attached. If the third pass still finds something, stop: hand the plan and every report to the owner;
 it is not ready for `/build overnight`.
 
 ## Overnight readiness
