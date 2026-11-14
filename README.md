@@ -32,7 +32,10 @@ rewriting, without losing what the idea was for.
    `simplify` skill.
 6. **Clearing review.** A subagent that wrote none of the code reviews the
    final commit, by name, and may use Claude Code's own `code-review` skill.
-   Any later commit voids its clearance.
+   Any later commit voids its clearance. It clears the work when it finds
+   no blocker and no major problem; smaller findings are listed in the pull
+   request for you to rule on, and are not fixed first, because each fix
+   would need another review.
 7. **Draft pull request.** You read the report, rule on anything it raised,
    and merge.
 
@@ -207,7 +210,10 @@ own `CLAUDE.md` for these, and ask when one is missing:
   scratch copy and runs everything, to find what reading the plan misses.
 - **Clearing review:** the final review before merge, by a fresh context that
   wrote none of the diff; it names the commit it read, and any later commit
-  voids it.
+  voids it. It clears on no blocker and no major finding.
+- **Delta review:** a clearing review of only the commits since the last
+  reviewed head and the code around what they changed. You can pick one, in
+  an attended run, once a clearing review has read the whole diff.
 - **Seam:** the public boundary a test targets.
 - **Retro line:** one line in a pull request body recording what a review
   or simplify pass found; `/reflect` promotes the instructive ones into the
