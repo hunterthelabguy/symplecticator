@@ -59,6 +59,14 @@ should we test?"
   red-green cycle.
 - **Regression tests prove themselves:** pass, revert the fix, watch it fail,
   restore, watch it pass.
+- **Never buy green by weakening a test.** To make a red suite pass, never
+  loosen an assertion, widen a tolerance, skip or delete a test, or move an
+  expected value off its source of truth. A test you believe is wrong
+  against the spec stays as it is and goes in your report as a concern;
+  changing it is a decision, not part of the loop. Removing a test that
+  kills no mutant the others miss (Test thickness, below) is not this: it
+  runs on a green suite, by measurement. (Adapted from
+  vaibhav-space/my-ai-coding-workflow, MIT.)
 
 ## Test thickness
 
