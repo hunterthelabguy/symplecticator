@@ -80,8 +80,9 @@ For each frontier task, up to 4 at once (a default, not a law):
    Global constraints, and the task block, verbatim; the instruction to use
    the tdd skill at the task's named seams and verification-before-completion
    before reporting; never make a red test pass by weakening, skipping or
-   deleting it (tdd, "Never buy green by weakening a test"), reporting a
-   test it believes wrong as a concern instead; commit in the charter's
+   deleting it (tdd, "Never buy green by weakening a test") unless the
+   task block asks for that exact change, reporting a test it believes
+   wrong as a concern instead; commit in the charter's
    commit form (floor item 4),
    trailer per the addendum unless the repo's CLAUDE.md says otherwise;
    report what was built, the Verify command's output, and any concern.
