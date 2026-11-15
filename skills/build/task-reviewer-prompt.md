@@ -82,6 +82,13 @@ Subagent (general-purpose):
     Warnings or other noise in the implementer's reported test output are
     findings; test output should be pristine.
 
+    Read every test file the diff touches for a weakened test: a loosened
+    assertion, a widened tolerance, an added skip, a deleted test, or an
+    expected value moved off its source of truth. Each is an Important
+    finding. A change the task block asks for in so many words is not a
+    weakening and not a finding; a defect the plan mandates is still one,
+    labeled plan-mandated (Calibration).
+
     Evidence you cannot see is not evidence that doesn't exist. If the
     report or its test evidence looks truncated, or you cannot locate the
     results it claims, re-read the file at its stated path, and if it is
