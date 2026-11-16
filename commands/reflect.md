@@ -36,12 +36,13 @@ file, if any. If it does not, ask before routing state.
 - Successor-facing runbook knowledge: `README.md`, if not already there.
 - Facts about the user, not the repo: agent memory, never committed.
 - A repeatable procedure: a proposed command; confirm with the user before creating it.
-- Worked examples: a finding from a simplify, executing-critique or mutation
-  pass that teaches something, correct or incorrect, goes to the curated examples
-  file beside that skill (one entry per kind, about a dozen, with PR number and
-  date), promoted from the PR retro lines; retire the entry it supersedes. More
-  is not better: the file loads whenever its skill runs, so an entry that
-  misleads or no longer fits is retired too.
+- Worked examples: a finding from a simplify, executing-critique,
+  clearing-review or mutation pass that teaches something, correct or
+  incorrect, goes to the curated examples file beside that skill (one entry
+  per kind, about a dozen, with PR number and date), promoted from the PR
+  retro lines; retire the entry it supersedes. More is not better: the file
+  loads whenever its skill runs, so an entry that misleads or no longer fits
+  is retired too.
 - A defect found this session that an earlier step had passed (critique, simplify,
   clearing review): one line under Escapes in `~/.claude/COSTS.md`, if that file
   exists.

@@ -208,7 +208,9 @@ to adopt. Items not chosen are deliberate declines; say so.
    plan in a scratch copy, build, simplify, and a final clearing review by a
    fresh context that wrote none of the code, then a draft pull request. A
    self-review can inform the work; only the clearing review clears it for
-   merge, and any later commit voids it.
+   merge, and any later commit voids it. It clears on no blocker and no
+   major finding; smaller findings are listed for you to rule on, not fixed
+   first.
 9. **Test thickness by mutation testing** (mutmut for Python): a surviving
    mutant means dead code or a missing test, and the spec decides which, so
    the spec is written and hardened before the code. Needs a scheduled

@@ -52,7 +52,12 @@ stop and ask.
    explicit call, quoted there.
 6. Follow the landing rule exactly: open the PR, watch checks to green, merge by the
    named method, sync main. Never merge before checks report. Where the rule allows
-   direct landing for ruled spec/docs commits, use it only for those.
+   direct landing for ruled spec/docs commits, use it only for those. A cleared PR
+   may list findings "Left for the owner". After the merge, any the owner has not
+   ruled on go into the repo's living plan as open questions, landed by the repo's
+   own rule and never on the PR branch before the merge (that commit would void the
+   review), or into this handoff's Awaiting owner word where the repo has no living
+   plan, so they outlive the PR.
 7. Do any cleanup the repo's `CLAUDE.md` attaches to the handoff (for example pruning
    merged local branches), and use its documented recoveries for known landing failures.
 8. If the change is user-visible and there is a deploy, confirm it picked the change up.
