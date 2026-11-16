@@ -313,7 +313,13 @@ else
     {number:5, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'", body:"",
      statusCheckRollup:[{status:"COMPLETED", conclusion:"SUCCESS"}, {status:"IN_PROGRESS", conclusion:null}]},
     {number:6, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'", body:"",
-     statusCheckRollup:[{status:"COMPLETED", conclusion:"SKIPPED"}, {status:"COMPLETED", conclusion:"NEUTRAL"}]}
+     statusCheckRollup:[{status:"COMPLETED", conclusion:"SKIPPED"}, {status:"COMPLETED", conclusion:"NEUTRAL"}]},
+    {number:7, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'",
+     body:"Review: delta at abc1234 CLEARED (lighter, Sonnet)", statusCheckRollup:[]},
+    {number:8, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'",
+     body:"Review: Opus at abc1234\n- the `Review:` line form is narrower than the pattern", statusCheckRollup:[]},
+    {number:9, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'", body:"## Review findings not fixed",
+     statusCheckRollup:[]}
   ] | '
   gh api rate_limit --jq "$fixtures$PR_JQ" >"$T/verdicts.txt" 2>&1
   sed 's/^/      | /' "$T/verdicts.txt"
@@ -321,9 +327,13 @@ else
   check "green rollup, CRLF body, Review at head: cleared" has "$T/verdicts.txt" "#2 [b] draft CI green, cleared at head: t"
   check "a failure beats running; last Review line wins: STALE" \
     has "$T/verdicts.txt" "#3 [b] CI RED, review STALE (review fff0000, head abc1234de): t"
-  check "drifted form: no Review line; STALE is not green" has "$T/verdicts.txt" "#4 [b] CI running, no Review line: t"
+  check "drifted form: Review line unreadable; STALE is not green" \
+    has "$T/verdicts.txt" "#4 [b] CI running, Review line unreadable: t"
   check "a check still running: not green" has "$T/verdicts.txt" "#5 [b] CI running, no Review line: t"
   check "every check skipped or neutral: not green" has "$T/verdicts.txt" "#6 [b] no check passed, no Review line: t"
+  check "words after the sha: Review line unreadable" has "$T/verdicts.txt" "#7 [b] no CI, Review line unreadable: t"
+  check "a readable line beats a prose review: line" has "$T/verdicts.txt" "#8 [b] no CI, cleared at head: t"
+  check "review with no colon: no Review line" has "$T/verdicts.txt" "#9 [b] no CI, no Review line: t"
 fi
 
 echo
