@@ -154,7 +154,7 @@ else
     gate_prog="$all | map([{body: .}] | ($GATE_JQ) | split(\"\t\")[0]) | join(\" \")"
     gt_prog="$REVIEW_DEF $all
       | map({headRefOid: \"abc1234000\", body: .} | review
-        | if . == \"no Review line\" then \"false\"
+        | if . == \"no Review line\" or . == \"Review line unreadable\" then \"false\"
           elif . == \"cleared at head\" or startswith(\"review STALE\") then \"true\" else \"other\" end)
       | join(\" \")"
     read -ra gate_says <<<"$(gh api rate_limit --jq "$gate_prog" 2>&1)"
