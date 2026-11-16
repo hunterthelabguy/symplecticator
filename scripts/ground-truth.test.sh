@@ -319,7 +319,9 @@ else
     {number:8, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'",
      body:"Review: Opus at abc1234\n- the `Review:` line form is narrower than the pattern", statusCheckRollup:[]},
     {number:9, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'", body:"## Review findings not fixed",
-     statusCheckRollup:[]}
+     statusCheckRollup:[]},
+    {number:10, title:"t", headRefName:"b", isDraft:false, headRefOid:"'$H'",
+     body:"Summary.\r\n**Clearing review:** CLEARED at `abc1234`\r\nVerify: green.", statusCheckRollup:[]}
   ] | '
   gh api rate_limit --jq "$fixtures$PR_JQ" >"$T/verdicts.txt" 2>&1
   sed 's/^/      | /' "$T/verdicts.txt"
@@ -334,6 +336,8 @@ else
   check "words after the sha: Review line unreadable" has "$T/verdicts.txt" "#7 [b] no CI, Review line unreadable: t"
   check "a readable line beats a prose review: line" has "$T/verdicts.txt" "#8 [b] no CI, cleared at head: t"
   check "review with no colon: no Review line" has "$T/verdicts.txt" "#9 [b] no CI, no Review line: t"
+  check "review: on a middle line of a CRLF body: unreadable" \
+    has "$T/verdicts.txt" "#10 [b] no CI, Review line unreadable: t"
 fi
 
 echo

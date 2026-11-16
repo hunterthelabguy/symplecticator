@@ -46,9 +46,11 @@ stop and ask.
    PR: `cleared at head`, `review STALE`, `Review line unreadable` or
    `no Review line`. Where it cannot (no GitHub, or an UNKNOWN line), compare
    by hand: `gh pr view --json headRefOid,body`, or without GitHub,
-   `git rev-parse HEAD`. Unreadable: read the body; only where the reviewer's
-   verdict there is cleared at the head, rewrite that line in the form above
-   with `gh pr edit` (not a commit) and run the script again.
+   `git rev-parse HEAD`. Unreadable: read the body. Where the line reports a
+   clearing review by a context that wrote none of the diff, cleared at the
+   head, ask the owner before rewriting it in the form above with
+   `gh pr edit` (not a commit), then run the script again; otherwise treat
+   it as missing.
    Missing or stale: stop and ask for a fresh clearing review by a context that
    wrote none of the diff (the cost gate applies). A skipped review stays
    marked uncleared in the PR body, and merging it anyway is the owner's
