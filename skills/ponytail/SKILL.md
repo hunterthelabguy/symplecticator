@@ -73,11 +73,11 @@ breaks. Trivial one-liners need none.
 
 An abstraction with one consumer and no planned future consumer is slop:
 inline it. A planned future consumer must have a target date and a check
-that reports when the date passes without the consumer arriving. A pure
-function with one call site and its own tests is not a one-consumer
-abstraction. Example: an integrator interface with only RK4 behind it is
-slop unless a second integrator has a date and a check; otherwise call RK4
-directly.
+that reports when the date passes without the consumer arriving; moving
+the date needs a ruling. A pure function with one call site and its own
+tests is not a one-consumer abstraction. Example: an integrator interface
+with only RK4 behind it is slop unless a second integrator has a date and
+a check; otherwise call RK4 directly.
 
 ## Slop list (cited by the simplify pass)
 
