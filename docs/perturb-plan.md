@@ -1028,6 +1028,10 @@ sandbox; never write a script to do what it refuses.
 Leaving `/perturb` means starting a new session; the default there is the
 owner's full charter.
 
+After the session is resumed or compacted, the guard may no longer be
+registered. Before any write, push or commit, stop and ask the owner to run
+`/perturb` again.
+
 ## 1. Preflight (one short turn)
 
 1. Check: `node --version` answers; the working tree is clean; the repo's
