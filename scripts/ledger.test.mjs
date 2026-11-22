@@ -297,3 +297,106 @@ test('a command refuses with exit 2 when the index is missing or broken, or the 
   assert.equal(run.status, 2);
   assert.match(run.stderr, /^usage: ledger\.mjs <list\|check\|next\|merged\|move\|init> \[args\]\n$/);
 });
+
+// ==== T3: init
+
+test('init writes an unclassified row for every entry and a note in the header', (t) => {
+  const bullets = '# T\n\nIntro.\n\n## 2. Entries\n\n- **R1 (first).** "x"\n- **R2 (2030-01-05: a first topic; then a second).** "y"\n- **Design note.** "z"\n';
+  const dir = repo(t, { 'LEDGER.md': bullets });
+  const run = cli(dir, 'init', 'R', 'owner/code');
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, 'LEDGER_INDEX.md written: 3 rulings, all unclassified\n');
+  const ix = L.parseIndex(get(dir, 'LEDGER_INDEX.md'));
+  assert.deepEqual(ix.settings, { 'pr-repo': 'owner/code', 'threshold-bytes': '131072', prefix: 'R' });
+  assert.deepEqual(ix.rows.map((r) => [r.id, r.date, r.status, r.pr, r.file, r.title]), [
+    ['R1', '', 'unclassified', 'none', 'LEDGER.md', 'first'],
+    ['R2', '2030-01-05', 'unclassified', 'none', 'LEDGER.md', 'a first topic; then a second'],
+    ['`Design note`', '', 'unclassified', 'none', 'LEDGER.md', 'Design note'],
+  ]);
+  assert.equal(get(dir, 'LEDGER.md'), bullets.replace('Intro.\n\n', `Intro.\n\n${L.HEADER_NOTE.join('\n')}\n\n`));
+  // The note is the three lines the spec gives (section 7), typed out here and not read from the script.
+  assert.deepEqual(L.HEADER_NOTE, [
+    'Before writing a ruling, run `node ~/.claude/scripts/ledger.mjs next` and',
+    "use the number it prints. Fill that ruling's row in `LEDGER_INDEX.md`",
+    '(status, round, pr) in the commit that adds the entry.',
+  ]);
+  // The index's intro says what each status means, and that only settled and superseded rows move.
+  const intro = ix.intro.replace(/\n/g, ' ');
+  for (const s of L.STATUSES) assert.match(intro, new RegExp(`\`${s}\`, `));
+  assert.match(intro, /Only `settled` and `superseded` rows move\./);
+  assert.deepEqual(L.check(dir).problems, []);
+});
+
+test('init dates a paragraph entry from the session heading above it and leaves its title empty', (t) => {
+  // The tabs in the last heading: white space inside a title becomes one space.
+  const text = 'L1. "x"\n\n## 2030-02-03: a session\n\nL2. "y"\n\nL3. 2030-02-09, later: "z"\n\n## L4 (2030-03-01): a\tnew \t one\n\n"w"\n';
+  const dir = repo(t, { 'LEDGER.md': text });
+  assert.equal(L.init(dir, 'L'), 4);
+  const ix = L.parseIndex(get(dir, 'LEDGER_INDEX.md'));
+  assert.deepEqual(ix.rows.map((r) => [r.id, r.date, r.title]), [['L1', '', ''], ['L2', '2030-02-03', ''], ['L3', '2030-02-09', ''], ['L4', '2030-03-01', 'a new one']]);
+  assert.equal(ix.settings['pr-repo'], 'none');
+  assert.equal(get(dir, 'LEDGER.md'), `${L.HEADER_NOTE.join('\n')}\n\n${text}`);
+});
+
+test('init keeps a non-ASCII character whole, in a title and at the end of the header', (t) => {
+  const arrow = '\xe2\x86\x92';
+  const titles = [
+    ['d\xc3\xa9j\xc3\xa0', 'd\xc3\xa9j\xc3\xa0'],
+    ['a\xc2\xa0b  c', 'a\xc2\xa0b c'],
+    [`${'a'.repeat(78)}${arrow} tail`, 'a'.repeat(78)],
+    [`${'a'.repeat(79)}\xc3\xa9 tail`, 'a'.repeat(79)],
+    [`${'a'.repeat(77)}${arrow}x`, `${'a'.repeat(77)}${arrow}`],
+    // A four-byte character that begins at byte 77: the cut backs up three bytes, the most there can be.
+    [`${'a'.repeat(77)}\xf0\x9f\x98\x80 tail`, 'a'.repeat(77)],
+    [`${'a'.repeat(79)} b`, 'a'.repeat(79)],
+    ['b'.repeat(80), 'b'.repeat(80)],
+  ];
+  const text = '# T\n\nIntro, voil\xc3\xa0\n\n' + titles.map(([title], i) => `## R${i + 1} (2030-01-01): ${title}\n\n"x"\n`).join('\n');
+  const dir = repo(t, { 'LEDGER.md': text });
+  L.init(dir, 'R');
+  assert.deepEqual(L.parseIndex(get(dir, 'LEDGER_INDEX.md')).rows.map((r) => r.title), titles.map((pair) => pair[1]));
+  assert.ok(validUtf8(get(dir, 'LEDGER_INDEX.md')));
+  assert.equal(L.formatIndex(L.parseIndex(get(dir, 'LEDGER_INDEX.md'))), get(dir, 'LEDGER_INDEX.md'));
+  assert.equal(get(dir, 'LEDGER.md'), text.replace('voil\xc3\xa0\n\n', `voil\xc3\xa0\n\n${L.HEADER_NOTE.join('\n')}\n\n`));
+});
+
+test('init cuts a title that is not UTF-8 at most three bytes short', (t) => {
+  // The bytes 0x93 and 0x94 are quotation marks in one old encoding and continuation bytes in UTF-8.
+  const title = '\x93\x94'.repeat(50);
+  const dir = repo(t, { 'LEDGER.md': `# T\n\n## R1 (2030-01-01): ${title}\n\n"x"\n` });
+  L.init(dir, 'R');
+  assert.equal(L.parseIndex(get(dir, 'LEDGER_INDEX.md')).rows[0].title, title.slice(0, 77));
+});
+
+test('init keeps CRLF line ends', (t) => {
+  const dir = repo(t, { 'LEDGER.md': '# T\r\n\r\n- **K1 (a).** "x"\r\n' });
+  L.init(dir, 'K');
+  assert.equal(get(dir, 'LEDGER.md'), `# T\r\n\r\n${L.HEADER_NOTE.join('\r\n')}\r\n\r\n- **K1 (a).** "x"\r\n`);
+  assert.ok(!/[^\r]\n/.test(get(dir, 'LEDGER_INDEX.md')));
+});
+
+test('init refuses without a prefix, over an index, and on a ledger already split', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1') });
+  refuses(() => L.init(dir), /give the ruling prefix in capitals/);
+  refuses(() => L.init(dir, 'r'), /give the ruling prefix in capitals/);
+  put(dir, 'LEDGER_SETTLED.md', ledger('R0'));
+  refuses(() => L.init(dir, 'R'), /LEDGER_SETTLED\.md exists/);
+  fs.rmSync(at(dir, 'LEDGER_SETTLED.md'));
+  L.init(dir, 'R');
+  const written = get(dir, 'LEDGER_INDEX.md');
+  refuses(() => L.init(dir, 'R'), /init: LEDGER_INDEX\.md exists/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), written);
+  assert.equal(cli(dir, 'init', 'R').status, 2);
+});
+
+test('init refuses outside a git repository, writing nothing', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-test-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  put(dir, 'LEDGER.md', ledger('R1'));
+  // The ceiling keeps git from finding a repository above the temp folder.
+  const run = spawnSync(process.execPath, [SCRIPT, 'init', 'R'], { cwd: dir, encoding: 'utf8', env: { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(dir) } });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^git rev-parse failed: fatal: not a git repository/);
+  assert.deepEqual(fs.readdirSync(dir), ['LEDGER.md']);
+  assert.equal(get(dir, 'LEDGER.md'), ledger('R1'));
+});
