@@ -222,13 +222,15 @@ unless one fails.
    guard cannot check. Remove `probe-sub` after.
 6. Remove the probe skill and the log.
 
-Open pull requests #4 (`CLAUDE.md`, `README.md`, `skills/build/SKILL.md`),
-#8 (`commands/handoff.md`, `scripts/build-stop-gate.test.sh`,
-`scripts/ground-truth.sh`, `scripts/ground-truth.test.sh`) and #9
-(`commands/handoff.md`, `skills/ponytail/SKILL.md`) touch files this plan
-modifies; `git merge-tree` of the built branch (T1 to T6 from this plan's
-blocks, on 9717339) with each of them, and with all three in turn, is
-clean, so no task waits on them.
+Pull requests #4, #8, #9 and #11 touched files this plan modifies
+(`CLAUDE.md`, `README.md`, `commands/handoff.md`, `scripts/ground-truth.sh`,
+`scripts/ground-truth.test.sh`) and are merged; `/build` starts from main at
+cf68b19. Checked there on 2026-11-22: every anchor T5 and T6 name occurs
+exactly once, as on 9717339, and pass 3's six as-written patches apply, T1
+to T4 and T6 cleanly and T5 by a three-way apply with no conflict (its
+context lines moved). On that tree all five suites passed, the
+ground-truth suite with main's new Review-line checks and T5's showcase
+checks together.
 
 ---
 
