@@ -536,3 +536,121 @@ test('outside a git repository next refuses with exit 2', (t) => {
   assert.match(run.stderr, /^git rev-parse failed: fatal: not a git repository/);
   assert.equal(get(dir, 'LEDGER_INDEX.md'), index('R', [['R1', 'standing']]));
 });
+
+// ==== T5: merged
+
+test('merged settles only round rows whose pull request has merged', (t) => {
+  for (const prRepo of ['owner/code', 'other/app']) {
+    const rows = [['R1', 'round', 'LEDGER.md', 'PR 7'], ['R2', 'round', 'LEDGER.md', 'PR 8'], ['R3', 'standing', 'LEDGER.md', 'PR 7'], ['R4', 'round'], ['R5', 'round', 'LEDGER.md', 'PR 70']];
+    const dir = repo(t, { 'LEDGER.md': ledger('R1', 'R2', 'R3', 'R4', 'R5'), 'LEDGER_INDEX.md': index('R', rows, { repo: prRepo }) });
+    const asked = [];
+    const prState = (n, r) => { asked.push([n, r]); return { 7: 'MERGED', 8: 'OPEN', 70: 'CLOSED' }[n]; };
+    assert.deepEqual(L.merged(dir, { prState }), ['R1']);
+    assert.deepEqual(asked, [[7, prRepo], [8, prRepo], [70, prRepo]]);
+    assert.deepEqual(L.parseIndex(get(dir, 'LEDGER_INDEX.md')).rows.map((r) => r.status), ['settled', 'round', 'standing', 'round', 'round']);
+    assert.equal(git(dir, 'log', '-1', '--format=%s').trim(), 'Ledger: 1 ruling settled, merged');
+    assert.equal(git(dir, 'show', '--name-only', '--format=', 'HEAD').trim(), 'LEDGER_INDEX.md');
+    assert.deepEqual(L.merged(dir, { prState }), []);
+    assert.equal(git(dir, 'rev-list', '--count', 'HEAD').trim(), '2');
+    assert.ok(!fs.existsSync(at(dir, LOCK)));
+  }
+});
+
+test('merged writes a commit subject of one length, with the rulings in the body', (t) => {
+  for (const count of [1, 12]) {
+    const settling = Array.from({ length: count }, (_, i) => `R${100 + i}`);
+    const dir = repo(t, { 'LEDGER.md': ledger(...settling), 'LEDGER_INDEX.md': index('R', settling.map((id) => [id, 'round', 'LEDGER.md', 'PR 7']), { repo: 'owner/code' }) });
+    assert.deepEqual(L.merged(dir, { prState: () => 'MERGED' }), settling);
+    const subject = git(dir, 'log', '-1', '--format=%s').trim();
+    assert.equal(subject, count === 1 ? 'Ledger: 1 ruling settled, merged' : 'Ledger: 12 rulings settled, merged');
+    assert.ok(subject.length <= 72);
+    assert.equal(git(dir, 'log', '-1', '--format=%b').trim(), settling.join('\n'));
+  }
+});
+
+test('merged refuses, changing nothing, when gh fails, gh is missing, or pr-repo is none', (t) => {
+  const rows = [['R1', 'round', 'LEDGER.md', 'PR 7'], ['R2', 'round', 'LEDGER.md', 'PR 8']];
+  const dir = repo(t, { 'LEDGER.md': ledger('R1', 'R2'), 'LEDGER_INDEX.md': index('R', rows, { repo: 'owner/code' }) });
+  const before = get(dir, 'LEDGER_INDEX.md');
+  refuses(() => L.merged(dir, { prState: (n) => { if (n === 8) throw new L.LedgerError('merged: gh failed for PR 8: boom'); return 'MERGED'; } }), /gh failed for PR 8/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), before);
+  const run = spawnSync(process.execPath, [SCRIPT, 'merged'], { cwd: dir, encoding: 'utf8', env: { ...process.env, LEDGER_GH: 'no-such-gh-command' } });
+  assert.equal(run.status, 2);
+  assert.equal(run.stderr, 'merged: gh not found\n');
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), before);
+  assert.equal(git(dir, 'rev-list', '--count', 'HEAD').trim(), '1');
+
+  const none = repo(t, { 'LEDGER.md': ledger('R1', 'R2'), 'LEDGER_INDEX.md': index('R', rows) });
+  refuses(() => L.merged(none, { prState: () => 'MERGED' }), /rows name pull requests but pr-repo is none/);
+  put(none, 'LEDGER_INDEX.md', get(none, 'LEDGER_INDEX.md') + '\n');
+  refuses(() => L.merged(none, { prState: () => 'MERGED' }), /merged: LEDGER_INDEX\.md has uncommitted changes/);
+});
+
+test('merged keeps what another session did to the index while gh was asked', (t) => {
+  const rows = [['R1', 'round', 'LEDGER.md', 'PR 7'], ['R2', 'round', 'LEDGER.md', 'PR 8'], ['R3', 'standing']];
+  const files = { 'LEDGER.md': ledger('R1', 'R2', 'R3'), 'LEDGER_INDEX.md': index('R', rows, { repo: 'owner/code' }) };
+
+  // The other session reserves a number during each question, and sets R2 back to standing.
+  const dir = repo(t, files);
+  const reserved = [];
+  const busy = (n) => {
+    reserved.push(L.next(dir));
+    if (n === 8) setStatus(dir, 'R2', 'round', 'standing');
+    return 'MERGED';
+  };
+  assert.deepEqual(L.merged(dir, { prState: busy }), ['R1']);
+  assert.deepEqual(reserved, ['R4', 'R5']);
+  assert.deepEqual(L.parseIndex(get(dir, 'LEDGER_INDEX.md')).rows.map((r) => [r.id, r.status]), [['R1', 'settled'], ['R2', 'standing'], ['R3', 'standing'], ['R4', 'reserved'], ['R5', 'reserved']]);
+  assert.equal(git(dir, 'log', '-1', '--format=%s').trim(), 'Ledger: 1 ruling settled, merged');
+  assert.equal(L.next(dir), 'R6');
+  assert.deepEqual(L.check(dir).problems, []);
+
+  // The other session points R1 at another pull request: the answer about PR 7 says nothing about PR 9.
+  const repointed = repo(t, files);
+  const repoint = (n) => {
+    if (n === 7) {
+      put(repointed, 'LEDGER_INDEX.md', get(repointed, 'LEDGER_INDEX.md').replace('| PR 7 |', '| PR 9 |'));
+      git(repointed, 'commit', '-qam', 'another pull request');
+    }
+    return n === 7 ? 'MERGED' : 'OPEN';
+  };
+  assert.deepEqual(L.merged(repointed, { prState: repoint }), []);
+  assert.deepEqual(L.parseIndex(get(repointed, 'LEDGER_INDEX.md')).rows.map((r) => [r.id, r.status, r.pr]), [['R1', 'round', 'PR 9'], ['R2', 'round', 'PR 8'], ['R3', 'standing', 'none']]);
+  assert.equal(git(repointed, 'rev-list', '--count', 'HEAD').trim(), '2');
+
+  // The other session points R1 at PR 8, which was asked about for R2 and has merged: the answer holds for R1.
+  const shared = repo(t, files);
+  const share = (n) => {
+    if (n === 7) {
+      put(shared, 'LEDGER_INDEX.md', get(shared, 'LEDGER_INDEX.md').replace('| PR 7 |', '| PR 8 |'));
+      git(shared, 'commit', '-qam', 'the same pull request');
+    }
+    return n === 8 ? 'MERGED' : 'OPEN';
+  };
+  assert.deepEqual(L.merged(shared, { prState: share }), ['R1', 'R2']);
+
+  // The other session settles both rows itself: nothing is left to do, and nothing is committed.
+  const done = repo(t, files);
+  const settleBoth = (n) => { setStatus(done, n === 7 ? 'R1' : 'R2', 'round', 'standing'); return 'MERGED'; };
+  assert.deepEqual(L.merged(done, { prState: settleBoth }), []);
+  assert.equal(git(done, 'rev-list', '--count', 'HEAD').trim(), '3');
+
+  // The other session leaves a row half written: merged does not commit it.
+  const half = repo(t, files);
+  const dirty = get(half, 'LEDGER_INDEX.md') + '\n';
+  refuses(() => L.merged(half, { prState: () => { put(half, 'LEDGER_INDEX.md', dirty); return 'MERGED'; } }), /merged: LEDGER_INDEX\.md has uncommitted changes/);
+  assert.equal(get(half, 'LEDGER_INDEX.md'), dirty);
+  assert.equal(git(half, 'rev-list', '--count', 'HEAD').trim(), '1');
+  assert.ok(!fs.existsSync(at(half, LOCK)));
+});
+
+test('merged writes under the lock that next takes', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': index('R', [['R1', 'round', 'LEDGER.md', 'PR 7']], { repo: 'owner/code' }) });
+  const before = get(dir, 'LEDGER_INDEX.md');
+  fs.mkdirSync(at(dir, LOCK));
+  refuses(() => L.merged(dir, { prState: () => 'MERGED', waitMs: 0 }), /^merged: the lock .*ledger-next\.lock is \d+ s old; remove it by hand/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), before);
+  assert.ok(fs.existsSync(at(dir, LOCK)));
+  fs.rmdirSync(at(dir, LOCK));
+  assert.deepEqual(L.merged(dir, { prState: () => 'MERGED' }), ['R1']);
+});
