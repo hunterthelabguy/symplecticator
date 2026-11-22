@@ -654,3 +654,202 @@ test('merged writes under the lock that next takes', (t) => {
   fs.rmdirSync(at(dir, LOCK));
   assert.deepEqual(L.merged(dir, { prState: () => 'MERGED' }), ['R1']);
 });
+
+// ==== T6: move
+
+const start = (t, extra = {}) => repo(t, {
+  'LEDGER.md': ledger('R1', 'R2', 'R3', 'R4', 'R5'),
+  'LEDGER_SETTLED.md': file('# Settled\n\nStill bind.\n\n', 'R0'),
+  'LEDGER_INDEX.md': index('R', [['R0', 'settled', 'LEDGER_SETTLED.md'], ['R1', 'standing'], ['R2', 'settled'], ['R3', 'round'], ['R4', 'superseded', 'LEDGER.md', 'none', 'R5'], ['R5', 'unclassified'], ['R6', 'reserved']]),
+  ...extra,
+});
+
+test('move sends settled and superseded entries to the settled file and nothing else', (t) => {
+  const dir = start(t);
+  const run = cli(dir, 'move');
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout, 'to LEDGER_SETTLED.md: R2, R4\nto LEDGER.md: none\n');
+  assert.equal(get(dir, 'LEDGER.md'), ledger('R1', 'R3', 'R5'));
+  assert.equal(get(dir, 'LEDGER_SETTLED.md'), file('# Settled\n\nStill bind.\n\n', 'R0', 'R2', 'R4'));
+  assert.deepEqual(L.parseIndex(get(dir, 'LEDGER_INDEX.md')).rows.map((r) => r.file), ['LEDGER_SETTLED.md', 'LEDGER.md', 'LEDGER_SETTLED.md', 'LEDGER.md', 'LEDGER_SETTLED.md', 'LEDGER.md', 'LEDGER.md']);
+  assert.deepEqual(L.check(dir).problems, []);
+  git(dir, 'commit', '-qam', 'moved');
+  assert.deepEqual(L.move(dir), { toSettled: [], toActive: [] });
+  assert.equal(git(dir, 'status', '--porcelain').trim(), '');
+  // With nothing to move and no settled file, none is made.
+  const idle = repo(t, { 'LEDGER.md': ledger('K1'), 'LEDGER_INDEX.md': index('K', [['K1', 'standing']]) });
+  assert.deepEqual(L.move(idle), { toSettled: [], toActive: [] });
+  assert.equal(git(idle, 'status', '--porcelain').trim(), '');
+});
+
+test('move creates the settled file with the sentence that its rulings still bind', (t) => {
+  const dir = repo(t, { 'LEDGER.md': '# T\r\n\r\n- **K1 (a).** "x"\r\n- **K2 (b).** "y"\r\n- **K3 (c).** "z"\r\n', 'LEDGER_INDEX.md': index('K', [['K1', 'standing'], ['K2', 'settled'], ['K3', 'standing']]) });
+  assert.deepEqual(L.move(dir), { toSettled: ['K2'], toActive: [] });
+  // K1 and K3 are new neighbours and get one blank line.
+  assert.equal(get(dir, 'LEDGER.md'), '# T\r\n\r\n- **K1 (a).** "x"\r\n\r\n- **K3 (c).** "z"\r\n');
+  assert.equal(get(dir, 'LEDGER_SETTLED.md'), L.SETTLED_HEADER.join('\r\n') + '\r\n\r\n- **K2 (b).** "y"\r\n');
+  assert.match(get(dir, 'LEDGER_SETTLED.md'), /They still bind unless superseded\. Settled means the work is done, not\r\nthat the ruling lapsed\./);
+});
+
+test('two entries with no blank line between them still have none after a move that touches neither', (t) => {
+  for (const eol of ['\n', '\r\n']) {
+    const lines = ['# T', '', '- **K0 (z).** "w"', '- **K1 (a).** "x"', '- **K2 (b).** "y"', '- **K3 (c).** "z"', '- **K4 (d).** "v"', ''];
+    const dir = repo(t, { 'LEDGER.md': lines.join(eol), 'LEDGER_INDEX.md': index('K', [['K0', 'standing'], ['K1', 'standing'], ['K2', 'settled'], ['K3', 'standing'], ['K4', 'standing']]) });
+    assert.deepEqual(L.move(dir), { toSettled: ['K2'], toActive: [] });
+    // K0 and K1, and K3 and K4, were neighbours and stay as they were; K1 and K3 are new neighbours.
+    assert.equal(get(dir, 'LEDGER.md'), ['# T', '', '- **K0 (z).** "w"', '- **K1 (a).** "x"', '', '- **K3 (c).** "z"', '- **K4 (d).** "v"', ''].join(eol));
+  }
+  // The same in the settled file: K1 and K2 stay as they were when K3 arrives after them.
+  const dir = repo(t, {
+    'LEDGER.md': '# T\n\n- **K3 (c).** "z"\n\n- **K4 (d).** "v"\n', 'LEDGER_SETTLED.md': '# S\n\n- **K1 (a).** "x"\n- **K2 (b).** "y"\n',
+    'LEDGER_INDEX.md': index('K', [['K1', 'settled', 'LEDGER_SETTLED.md'], ['K2', 'settled', 'LEDGER_SETTLED.md'], ['K3', 'settled'], ['K4', 'standing']]),
+  });
+  assert.deepEqual(L.move(dir), { toSettled: ['K3'], toActive: [] });
+  assert.equal(get(dir, 'LEDGER_SETTLED.md'), '# S\n\n- **K1 (a).** "x"\n- **K2 (b).** "y"\n\n- **K3 (c).** "z"\n');
+});
+
+test('the settled file keeps the order of the index rows', (t) => {
+  const dir = repo(t, {
+    'LEDGER.md': ledger('K1', 'K2', 'K4'), 'LEDGER_SETTLED.md': file('# S\n\n', 'K3'),
+    'LEDGER_INDEX.md': index('K', [['K1', 'settled'], ['K2', 'standing'], ['K3', 'settled', 'LEDGER_SETTLED.md'], ['K4', 'settled']]),
+  });
+  assert.deepEqual(L.move(dir), { toSettled: ['K1', 'K4'], toActive: [] });
+  assert.equal(get(dir, 'LEDGER_SETTLED.md'), file('# S\n\n', 'K1', 'K3', 'K4'));
+});
+
+test('move then the reverse leaves both files byte-identical to the start', (t) => {
+  const dir = start(t);
+  const before = [get(dir, 'LEDGER.md'), get(dir, 'LEDGER_SETTLED.md'), get(dir, 'LEDGER_INDEX.md')];
+  L.move(dir);
+  git(dir, 'commit', '-qam', 'moved');
+  setStatus(dir, 'R2', 'settled', 'standing');
+  setStatus(dir, 'R4', 'superseded', 'round');
+  assert.deepEqual(L.move(dir), { toSettled: [], toActive: ['R2', 'R4'] });
+  setStatus(dir, 'R2', 'standing', 'settled');
+  setStatus(dir, 'R4', 'round', 'superseded');
+  assert.deepEqual([get(dir, 'LEDGER.md'), get(dir, 'LEDGER_SETTLED.md'), get(dir, 'LEDGER_INDEX.md')], before);
+});
+
+test('on a ledger with session headings, an entry moved out and back lands after the nearest earlier entry', (t) => {
+  // The stated limit: L3 was written under the second heading and comes back above it.
+  const text = '# T\n\n## 2030-01-01: first session\n\nL1. "a"\n\nL2. "b"\n\n## 2030-01-02: second session\n\nL3. "c"\n\nL4. "d"\n';
+  const dir = repo(t, { 'LEDGER.md': text, 'LEDGER_INDEX.md': index('L', [['L1', 'standing'], ['L2', 'standing'], ['L3', 'settled'], ['L4', 'standing']]) });
+  assert.deepEqual(L.move(dir), { toSettled: ['L3'], toActive: [] });
+  assert.equal(get(dir, 'LEDGER.md'), text.replace('L3. "c"\n\n', ''));
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-qm', 'moved');
+  setStatus(dir, 'L3', 'settled', 'standing');
+  assert.deepEqual(L.move(dir), { toSettled: [], toActive: ['L3'] });
+  assert.equal(get(dir, 'LEDGER.md'), '# T\n\n## 2030-01-01: first session\n\nL1. "a"\n\nL2. "b"\n\nL3. "c"\n\n## 2030-01-02: second session\n\nL4. "d"\n');
+
+  // The other half of the limit: the blank lines around a returning entry are not restored.
+  const tight = repo(t, { 'LEDGER.md': '# T\n\n- **K1 (a).** "w"\n- **K2 (b).** "x"\n- **K3 (c).** "y"\n', 'LEDGER_INDEX.md': index('K', [['K1', 'standing'], ['K2', 'settled'], ['K3', 'standing']]) });
+  L.move(tight);
+  git(tight, 'add', '-A');
+  git(tight, 'commit', '-qm', 'moved');
+  setStatus(tight, 'K2', 'settled', 'standing');
+  assert.deepEqual(L.move(tight), { toSettled: [], toActive: ['K2'] });
+  assert.equal(get(tight, 'LEDGER.md'), '# T\n\n- **K1 (a).** "w"\n\n- **K2 (b).** "x"\n\n- **K3 (c).** "y"\n');
+});
+
+test('an entry that comes back with no earlier entry in the active file goes before the first entry', (t) => {
+  const dir = start(t);
+  setStatus(dir, 'R0', 'settled', 'standing');
+  assert.deepEqual(L.move(dir), { toSettled: ['R2', 'R4'], toActive: ['R0'] });
+  assert.equal(get(dir, 'LEDGER.md'), ledger('R0', 'R1', 'R3', 'R5'));
+  // With no entry left in the active file, it goes below the header.
+  const empty = repo(t, { 'LEDGER.md': '# T\n\nHeader text.\n', 'LEDGER_SETTLED.md': file('# S\n\n', 'K1'), 'LEDGER_INDEX.md': index('K', [['K1', 'standing', 'LEDGER_SETTLED.md']]) });
+  assert.deepEqual(L.move(empty), { toSettled: [], toActive: ['K1'] });
+  assert.equal(get(empty, 'LEDGER.md'), file('# T\n\nHeader text.\n\n', 'K1'));
+});
+
+test('an old bullet with no number moves, and stays, when the numbered bullets are in the other file', (t) => {
+  const text = '# T\n\n- **K1 (a).** "w"\n- **Design note.** "x"\n\n## K2 (2030-01-01): new form\n\n"y"\n';
+  const settledHead = L.SETTLED_HEADER.join('\n') + '\n\n';
+  // The only numbered bullet leaves, and the bullet with no number stays behind.
+  const stays = repo(t, { 'LEDGER.md': text, 'LEDGER_INDEX.md': index('K', [['K1', 'settled'], ['`Design note`', 'standing'], ['K2', 'standing']]) });
+  assert.deepEqual(L.move(stays), { toSettled: ['K1'], toActive: [] });
+  assert.equal(get(stays, 'LEDGER.md'), '# T\n\n- **Design note.** "x"\n\n## K2 (2030-01-01): new form\n\n"y"\n');
+  assert.equal(get(stays, 'LEDGER_SETTLED.md'), settledHead + '- **K1 (a).** "w"\n');
+  assert.deepEqual(L.check(stays).problems, []);
+  // The bullet with no number leaves alone, for a settled file that has no numbered bullet.
+  const goes = repo(t, { 'LEDGER.md': text, 'LEDGER_INDEX.md': index('K', [['K1', 'standing'], ['`Design note`', 'settled'], ['K2', 'standing']]) });
+  assert.deepEqual(L.move(goes), { toSettled: ['`Design note`'], toActive: [] });
+  assert.equal(get(goes, 'LEDGER.md'), '# T\n\n- **K1 (a).** "w"\n\n## K2 (2030-01-01): new form\n\n"y"\n');
+  assert.equal(get(goes, 'LEDGER_SETTLED.md'), settledHead + '- **Design note.** "x"\n');
+  assert.deepEqual(L.check(goes).problems, []);
+});
+
+test('move leaves an entry that ends in a non-ASCII character as it was', (t) => {
+  const text = '# T\n\n## R1 (2030-01-01): a\n\n"x" voil\xc3\xa0\n\n## R2 (2030-01-01): b\n\n"y"\n\n## R3 (2030-01-01): c\n\n"z" voil\xc3\xa0\n';
+  const dir = repo(t, { 'LEDGER.md': text, 'LEDGER_INDEX.md': index('R', [['R1', 'standing'], ['R2', 'settled'], ['R3', 'settled']]) });
+  assert.deepEqual(L.move(dir), { toSettled: ['R2', 'R3'], toActive: [] });
+  assert.equal(get(dir, 'LEDGER.md'), '# T\n\n## R1 (2030-01-01): a\n\n"x" voil\xc3\xa0\n');
+  assert.equal(get(dir, 'LEDGER_SETTLED.md'), L.SETTLED_HEADER.join('\n') + '\n\n## R2 (2030-01-01): b\n\n"y"\n\n## R3 (2030-01-01): c\n\n"z" voil\xc3\xa0\n');
+  assert.ok(validUtf8(get(dir, 'LEDGER.md')) && validUtf8(get(dir, 'LEDGER_SETTLED.md')));
+});
+
+test('move restores all three files when the entries afterwards are not the entries before', (t) => {
+  for (const withSettled of [true, false]) {
+    const dir = start(t);
+    if (!withSettled) {
+      fs.rmSync(at(dir, 'LEDGER_SETTLED.md'));
+      put(dir, 'LEDGER_INDEX.md', get(dir, 'LEDGER_INDEX.md').replace(/^\| R0 .*\n/m, ''));
+      git(dir, 'commit', '-qam', 'no settled file');
+    }
+    const before = [get(dir, 'LEDGER.md'), withSettled ? get(dir, 'LEDGER_SETTLED.md') : null, get(dir, 'LEDGER_INDEX.md')];
+    const damage = () => put(dir, 'LEDGER_SETTLED.md', get(dir, 'LEDGER_SETTLED.md').replace('words of R4', 'words of R4, edited'));
+    refuses(() => L.move(dir, { afterWrite: damage }), /not the entries before it; all three files restored/);
+    assert.deepEqual([get(dir, 'LEDGER.md'), fs.existsSync(at(dir, 'LEDGER_SETTLED.md')) ? get(dir, 'LEDGER_SETTLED.md') : null, get(dir, 'LEDGER_INDEX.md')], before);
+    assert.equal(git(dir, 'status', '--porcelain').trim(), '');
+  }
+});
+
+test('move also restores when a header or a session heading was changed or an entry lost', (t) => {
+  const damages = [
+    (dir) => put(dir, 'LEDGER.md', get(dir, 'LEDGER.md').replace('Header text.', 'Header.')),
+    (dir) => put(dir, 'LEDGER_SETTLED.md', get(dir, 'LEDGER_SETTLED.md').replace('Still bind.', 'Lapsed.')),
+    (dir) => put(dir, 'LEDGER_SETTLED.md', get(dir, 'LEDGER_SETTLED.md').replace(entry('R2'), '')),
+  ];
+  for (const damage of damages) {
+    const dir = start(t);
+    refuses(() => L.move(dir, { afterWrite: () => damage(dir) }), /all three files restored/);
+    assert.equal(git(dir, 'status', '--porcelain').trim(), '');
+  }
+});
+
+test('a ## line that is not an entry never moves', (t) => {
+  const text = '# T\n\n## 2030-01-01: first session\n\nL1. "a"\n\nL2. "b"\n\n## 2030-01-02: second session\n\nL3. "c"\n';
+  const dir = repo(t, { 'LEDGER.md': text, 'LEDGER_INDEX.md': index('L', [['L1', 'settled'], ['L2', 'settled'], ['L3', 'superseded', 'LEDGER.md', 'none', 'L1']]) });
+  assert.deepEqual(L.move(dir), { toSettled: ['L1', 'L2', 'L3'], toActive: [] });
+  assert.equal(get(dir, 'LEDGER.md'), '# T\n\n## 2030-01-01: first session\n\n## 2030-01-02: second session\n');
+  assert.equal(get(dir, 'LEDGER_SETTLED.md'), L.SETTLED_HEADER.join('\n') + '\n\nL1. "a"\n\nL2. "b"\n\nL3. "c"\n');
+});
+
+test('move refuses on a dirty tree or a failing check, changing nothing', (t) => {
+  const dirty = start(t);
+  put(dirty, 'notes.txt', 'x\n');
+  refuses(() => L.move(dirty), /move: the working tree is not clean; commit first/);
+  assert.equal(get(dirty, 'LEDGER.md'), ledger('R1', 'R2', 'R3', 'R4', 'R5'));
+
+  const broken = start(t, { 'LEDGER.md': ledger('R1', 'R2', 'R3', 'R4', 'R5', 'R7') });
+  refuses(() => L.move(broken), /move: check fails:\nR7: an entry with no row/);
+  assert.equal(cli(broken, 'move').status, 2);
+  assert.equal(git(broken, 'status', '--porcelain').trim(), '');
+});
+
+test('every command refuses, changing nothing, on a table it cannot parse', (t) => {
+  const dir = start(t);
+  put(dir, 'LEDGER_INDEX.md', get(dir, 'LEDGER_INDEX.md').replace('|---|---|---|---|---|---|---|---|\n', '').replace('- pr-repo: none', '- pr-repo: owner/code'));
+  git(dir, 'commit', '-qam', 'a hand edit that lost the separator row');
+  const state = () => [get(dir, 'LEDGER.md'), get(dir, 'LEDGER_SETTLED.md'), get(dir, 'LEDGER_INDEX.md'), git(dir, 'rev-parse', 'HEAD'), git(dir, 'status', '--porcelain')];
+  const before = state();
+  for (const command of ['list', 'check', 'next', 'merged', 'move']) {
+    const run = cli(dir, command);
+    assert.equal(run.status, 2, command);
+    assert.equal(run.stderr, 'LEDGER_INDEX.md: the Rulings table needs a separator row (| --- | --- |) as its second line\n', command);
+    assert.equal(run.stdout, '', command);
+  }
+  assert.deepEqual(state(), before);
+  assert.ok(!fs.existsSync(at(dir, LOCK)));
+});

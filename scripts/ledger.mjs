@@ -449,6 +449,97 @@ export function merged(dir, { prState = ghPrState, waitMs = 10000 } = {}) {
   });
 }
 
+// ==== T6: move
+
+export const SETTLED_HEADER = [
+  '# Settled rulings', '',
+  'Rulings moved out of `LEDGER.md` by `ledger.mjs move`, text unchanged.',
+  'They still bind unless superseded. Settled means the work is done, not',
+  'that the ruling lapsed. New rulings are never written here; they go in',
+  '`LEDGER.md`. Status and open items are in `LEDGER_INDEX.md`.',
+];
+
+// What must survive a move: each entry's text and each file's own text, up to the blank lines after it.
+const body = (s) => trimEnd(s.text);
+const entryTexts = (ledgers) => ledgers.flatMap((l) => (l ? l.segs : [])).filter((s) => s.id !== null).map((s) => `${s.id}\n${body(s)}`).sort();
+const fixedTexts = (ledger) => ledger.segs.filter((s) => s.id === null).map(body);
+const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+// Segments that were neighbours before keep the bytes between them. A new pair gets one blank line, and the
+// file ends with one line end.
+function seal(ledger, nextBefore) {
+  ledger.segs.forEach((s, i) => {
+    const after = ledger.segs[i + 1];
+    if (!after) s.text = body(s) + ledger.eol;
+    else if (nextBefore.get(s) !== after) s.text = body(s) + ledger.eol + ledger.eol;
+  });
+}
+const neighbours = (ledger) => new Map(ledger.segs.map((s, i) => [s, ledger.segs[i + 1]]));
+
+// Put every entry in the file its status names: settled and superseded in LEDGER_SETTLED.md, the rest in
+// LEDGER.md. So a wrong move is undone by setting the row back and running move again. Entry text is never
+// changed; afterwards the set of entry texts and each file's own text are compared with before, and all
+// three files are restored if they differ.
+export function move(dir, { afterWrite = () => {} } = {}) {
+  const at = (f) => path.join(dir, f);
+  if (trim(git(dir, 'status', '--porcelain')) !== '') throw new LedgerError('move: the working tree is not clean; commit first');
+  const found = check(dir);
+  if (found.problems.length) throw new LedgerError(`move: check fails:\n${found.problems.join('\n')}`);
+  const { ix, active, settled } = loadRepo(dir);
+  const order = new Map(ix.rows.map((r, i) => [r.id, i]));
+  const row = new Map(ix.rows.map((r) => [r.id, r]));
+  const home = (s) => (['settled', 'superseded'].includes(row.get(s.id).status) ? SETTLED : ACTIVE);
+  const out = active.segs.filter((s) => s.id !== null && home(s) === SETTLED);
+  const back = settled ? settled.segs.filter((s) => s.id !== null && home(s) === ACTIVE) : [];
+  if (!out.length && !back.length) return { toSettled: [], toActive: [] };
+
+  const newActive = { eol: active.eol, segs: active.segs.filter((s) => !out.includes(s)) };
+  for (const s of back) {
+    // After the nearest earlier entry still in the active file, even when a session heading stood between
+    // them; with none, before the first entry.
+    let pos = -1;
+    newActive.segs.forEach((t, i) => { if (t.id !== null && order.get(t.id) < order.get(s.id)) pos = i; });
+    if (pos === -1) {
+      const firstEntry = newActive.segs.findIndex((t) => t.id !== null);
+      pos = (firstEntry === -1 ? newActive.segs.length : firstEntry) - 1;
+    }
+    newActive.segs.splice(pos + 1, 0, s);
+  }
+  const old = settled || { eol: active.eol, segs: [{ id: null, text: SETTLED_HEADER.join(active.eol) + active.eol }] };
+  const newSettled = {
+    eol: old.eol,
+    segs: [
+      ...old.segs.filter((s) => s.id === null),
+      ...[...old.segs.filter((s) => s.id !== null && !back.includes(s)), ...out].sort((a, b) => order.get(a.id) - order.get(b.id)),
+    ],
+  };
+  for (const s of out) row.get(s.id).file = SETTLED;
+  for (const s of back) row.get(s.id).file = ACTIVE;
+  const wanted = { entries: entryTexts([active, settled]), active: fixedTexts(active), settled: fixedTexts(old) };
+  const nextBefore = new Map([...neighbours(active), ...neighbours(old)]);
+  seal(newActive, nextBefore);
+  seal(newSettled, nextBefore);
+
+  const before = { [ACTIVE]: read(at(ACTIVE)), [SETTLED]: settled ? read(at(SETTLED)) : null, [INDEX]: read(at(INDEX)) };
+  write(at(ACTIVE), formatLedger(newActive));
+  write(at(SETTLED), formatLedger(newSettled));
+  write(at(INDEX), formatIndex(ix));
+  afterWrite();
+
+  const [nowActive, nowSettled] = readLedgers(dir, ix.settings.prefix);
+  const conserved = same(wanted.entries, entryTexts([nowActive, nowSettled]))
+    && same(wanted.active, fixedTexts(nowActive))
+    && same(wanted.settled, fixedTexts(nowSettled));
+  if (!conserved) {
+    for (const [f, text] of Object.entries(before)) {
+      if (text === null) fs.rmSync(at(f), { force: true });
+      else write(at(f), text);
+    }
+    throw new LedgerError('move: the entries after the move are not the entries before it; all three files restored');
+  }
+  return { toSettled: out.map((s) => s.id), toActive: back.map((s) => s.id) };
+}
+
 // ==== CLI
 
 function main(argv) {
@@ -473,6 +564,12 @@ function main(argv) {
     case 'merged': {
       const ids = merged(dir);
       console.log(ids.length ? `settled: ${ids.join(', ')}` : 'no round has merged');
+      return 0;
+    }
+    case 'move': {
+      const { toSettled, toActive } = move(dir);
+      console.log(`to ${SETTLED}: ${toSettled.join(', ') || 'none'}`);
+      console.log(`to ${ACTIVE}: ${toActive.join(', ') || 'none'}`);
       return 0;
     }
     default:
