@@ -248,6 +248,84 @@ export function list(dir) {
   return out;
 }
 
+// ==== T3: init
+
+export const HEADER_NOTE = [
+  'Before writing a ruling, run `node ~/.claude/scripts/ledger.mjs next` and',
+  "use the number it prints. Fill that ruling's row in `LEDGER_INDEX.md`",
+  '(status, round, pr) in the commit that adds the entry.',
+];
+
+const INDEX_INTRO = [
+  '# Ledger index', '',
+  'Status and open items for the rulings in `LEDGER.md` and',
+  '`LEDGER_SETTLED.md`. Rows are edited by hand and by `ledger.mjs`; run',
+  '`node ~/.claude/scripts/ledger.mjs check` after a hand edit. An open item',
+  'is closed by striking its item cell (`~~item~~`), or every cell of its row.', '',
+  'Statuses: `reserved`, a number `next` took whose entry is not written yet;',
+  '`standing`, a rule that keeps applying (a ruling that also steers a round',
+  'is `standing`); `round`, a choice that steers work not yet merged;',
+  '`settled`, its work has merged or a spec now holds it; `superseded`, a',
+  'later ruling replaces it, named in `superseded-by`; `unclassified`, written',
+  'by `init`. Read each `unclassified` entry and give its row one of the',
+  'others by hand. Only `settled` and `superseded` rows move.', '', '',
+];
+
+// A title is at most 80 bytes. The cut never falls inside a UTF-8 character: it backs up while the first
+// byte it would drop is a continuation byte (0x80 to 0xBF), three times at most, since a character has no
+// more of them. So a title in a file that is not UTF-8 loses three bytes at worst, not all of them.
+function cut(s, max) {
+  let n = max;
+  while (n > max - 3 && (s.charCodeAt(n) & 0xc0) === 0x80) n--;
+  return s.slice(0, n);
+}
+
+function titleOf(first, id) {
+  if (!/^(- \*\*|## )/.test(first)) return '';
+  let t = first.replace(/^(- \*\*|## )/, '');
+  if (!id.startsWith('`')) t = t.slice(id.length);
+  t = t.replace(/\*\*.*$/, '').replace(/\d{4}-\d{2}-\d{2}/, '').replace(/[()]/g, ' ')
+    .replace(/[ \t]+/g, ' ').replace(/^[ \t:.]+|[ \t:.]+$/g, '');
+  return trimEnd(cut(t, 80));
+}
+
+// A git command that fails is a refusal (exit 2) that carries git's own words, not a crash.
+function git(dir, ...args) {
+  try {
+    return execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    throw new LedgerError(`git ${args[0]} failed: ${trim(String(e.stderr || e.message))}`);
+  }
+}
+
+// Outside a git repository init refuses: the note it writes sends every session to next, which needs one.
+export function init(dir, prefix, prRepo = 'none') {
+  const at = (f) => path.join(dir, f);
+  if (!/^[A-Z]+$/.test(prefix || '')) throw new LedgerError('init: give the ruling prefix in capitals, for example: init R');
+  if (fs.existsSync(at(INDEX))) throw new LedgerError(`init: ${INDEX} exists`);
+  if (fs.existsSync(at(SETTLED))) throw new LedgerError(`init: ${SETTLED} exists; this ledger was split by hand and its index is written by hand`);
+  if (!fs.existsSync(at(ACTIVE))) throw new LedgerError(`init: ${ACTIVE} not found`);
+  git(dir, 'rev-parse', '--git-dir');
+  const ledger = parseLedger(read(at(ACTIVE)), prefix);
+  const rows = [];
+  let sectionDate = '';
+  for (const s of ledger.segs) {
+    const first = s.text.split(/\r?\n/, 1)[0];
+    const date = (first.match(/\d{4}-\d{2}-\d{2}/) || [''])[0];
+    if (s.id === null) { if (date) sectionDate = date; continue; }
+    rows.push({ id: s.id, date: date || sectionDate, status: 'unclassified', round: '', pr: 'none', 'superseded-by': '', file: ACTIVE, title: titleOf(first, s.id) });
+  }
+  const eol = ledger.eol;
+  const note = HEADER_NOTE.join(eol);
+  const head = ledger.segs.length && ledger.segs[0].id === null ? ledger.segs[0] : null;
+  if (head) head.text = trimEnd(head.text) + eol + eol + note + eol + eol;
+  else ledger.segs.unshift({ id: null, text: note + eol + eol });
+  const ix = { eol, intro: INDEX_INTRO.join(eol), settings: { prefix, 'pr-repo': prRepo, 'threshold-bytes': String(DEFAULT_THRESHOLD) }, rows, open: [] };
+  write(at(INDEX), formatIndex(ix));
+  write(at(ACTIVE), formatLedger(ledger));
+  return rows.length;
+}
+
 // ==== CLI
 
 function main(argv) {
@@ -263,6 +341,9 @@ function main(argv) {
       for (const n of notices) console.log(`note  ${n}`);
       return problems.length ? 1 : 0;
     }
+    case 'init':
+      console.log(`${INDEX} written: ${init(dir, args[0], args[1])} rulings, all unclassified`);
+      return 0;
     default:
       throw new LedgerError('usage: ledger.mjs <list|check|next|merged|move|init> [args]');
   }
