@@ -13,17 +13,17 @@ do not exist on the base; T1, T2 and T3 create them.
 
 | Task | State | Commit | Verify |
 |---|---|---|---|
-| T1 commit-scan.sh | fix round 1 | c90ac8e (task branch) | review: 3 Important test gaps |
+| T1 commit-scan.sh | re-check | cdf09cc (task branch) | commit-scan all passed; 22 of 22 mutants killed |
 | T2 perturb-guard.mjs | todo | | |
 | T3 /perturb skill and hook | todo | | |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
-| T5 showcase branches, ruling count | fix round 1 | b4e1612 (task branch) | review: 1 Important (14-day edge), spec miss |
+| T5 showcase branches, ruling count | re-check | a42af3d (task branch) | ground-truth all passed; 12 of 12 mutants killed |
 | T6 setup, template, docs, CI | todo | | |
 | Floor-9 batch | todo | | |
 
 ## Agents
 
-Spawned: 6. Resumed: 2.
+Spawned: 6. Resumed: 5.
 
 ## Rulings
 
@@ -73,3 +73,15 @@ Spawned: 6. Resumed: 2.
   reviewer's other Minor, a stale local branch standing for a newer
   pushed copy, is the plan's own interface ("listed once, by its local
   name") and is listed for the owner.
+- Ruling (Claude): the showcase flag's fix takes the implementer's
+  option B over the controller's first brief: trailing slashes on both
+  for-each-ref patterns (`refs/heads/showcase/`,
+  `refs/remotes/$REMOTE/showcase/`) instead of an awk filter, edge
+  fixtures at 14.5 and 13.5 days instead of 15 and 13, and the
+  exact-`showcase` fixture in a repo of its own; why: the brief failed
+  as written (whole-day fixtures sit on the cutoff mutants'
+  boundaries, so one survived; git refuses a `showcase` branch beside
+  `showcase/*` ones; the awk filter made the block's mutants (e) and
+  (f) survive), and option B killed all 12 mutants in scratch; cost if
+  wrong: the trailing-slash pattern behaves otherwise on an older git
+  (macOS CI would show it).
