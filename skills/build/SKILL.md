@@ -109,7 +109,9 @@ the graph running.
 - A change to scope, an interface others depend on, or a ruled decision:
   attended, stop and ask; **[overnight]** park the task.
 - Always stop, in both modes: irreversible or destructive actions,
-  security-sensitive actions, any merge to the base branch, force-pushes.
+  security-sensitive actions, any merge to the base branch (a yes is not
+  leave to merge: step 5 says who merges, and this run never does),
+  force-pushes.
   Stopping means not taking that action: attended, ask; **[overnight]**,
   park the task. The run still ends with its report and block.
 - **[overnight]** No gates and no coaching notes (the charter's
@@ -198,9 +200,10 @@ it voids it.
    task is the next piece of work: fix the findings or the red verify and
    get a fresh clearing review, unless the owner's merge-anyway call is quoted
    in the PR. The PR stays a draft until the owner marks it ready. It is
-   merged on a cleared head (the block's Ground truth line shows it;
-   `/handoff` checks the same Review line when it does the landing), by the
-   owner, or by Claude on the owner's word for that PR, quoted in the PR.
+   merged on a cleared head with green CI (the block's Ground truth line
+   shows it; `/handoff` checks the same Review line when it does the
+   landing), by the owner, or by Claude on the owner's word for that PR,
+   quoted in the PR.
    This run never merges it.
 6. Remove the task worktrees.
 7. End with the block as the final message, cleared or not. The Stop hook
