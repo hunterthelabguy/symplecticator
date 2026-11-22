@@ -77,6 +77,14 @@ test('each of the four heading forms parses to the same entry list', () => {
   }
 });
 
+test('a heading or bullet entry line may have a space, a full stop, a bracket or a colon after its number', () => {
+  for (const f of [' ', '.', '(', ':']) {
+    assert.equal(L.entryId(`## R5${f}title`, 'R'), 'R5', `heading ${f}`);
+    assert.equal(L.entryId(`- **R5${f}title**`, 'R'), 'R5', `bullet ${f}`);
+    assert.equal(L.hasNumberedBullets(`# T\n\n- **R5${f}title**\n`, 'R'), true, `bullets ${f}`);
+  }
+});
+
 test('joining the segments gives the file back, byte for byte', () => {
   const texts = [
     '# T\r\n\r\n- **R1 (a).** "x"\r\n- **R2 (b).** "y"\r\n\r\n\r\n- **R3 (c).** "z"',
@@ -454,6 +462,15 @@ test('next counts no line that only looks like an entry, and counts one inside a
   const fenced = repo(t, { 'LEDGER.md': withLines('~~~', 'R50. "an example"', '~~~'), 'LEDGER_INDEX.md': index('R', rows) });
   assert.deepEqual(L.check(fenced).problems, []);
   assert.equal(L.next(fenced), 'R51');
+});
+
+test('next counts a heading or bullet line whose number has a full stop, a bracket or a colon after it', (t) => {
+  // Inside a fenced block a line is no entry, so only next's scan of the lines can find its number.
+  for (const [line, want] of [['## R40(2030-01-03): c', 'R41'], ['- **R60:** "x"', 'R61'], ['## R70. c', 'R71']]) {
+    const dir = repo(t, { 'LEDGER.md': `# T\n\n${entry('R1')}~~~\n${line}\n~~~\n`, 'LEDGER_INDEX.md': index('R', [['R1', 'standing']]) });
+    assert.deepEqual(L.check(dir).problems, []);
+    assert.equal(L.next(dir), want);
+  }
 });
 
 test('next refuses when the index has uncommitted changes, and leaves no lock behind', (t) => {
