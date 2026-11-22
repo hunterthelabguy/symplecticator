@@ -1,4 +1,4 @@
-# The two script suites, on Linux and on macOS. macOS is the point: its stock bash 3.2, missing timeout and
+# The three script suites, on Linux and on macOS. macOS is the point: its stock bash 3.2, missing timeout and
 # gtimeout, and BSD touch are the paths the scripts' portability fixes take, and no Mac had run them before.
 # A suite's own skips (no cygpath; gh sharing a folder with git) stay skips; any FAIL fails the job.
 name: test
@@ -31,3 +31,8 @@ jobs:
       - run: bash scripts/ground-truth.test.sh
       - if: ${{ !cancelled() }}
         run: bash scripts/build-stop-gate.test.sh
+      - name: Node in use
+        if: ${{ !cancelled() }}
+        run: node --version
+      - if: ${{ !cancelled() }}
+        run: node --test scripts/ledger.test.mjs
