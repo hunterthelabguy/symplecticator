@@ -326,6 +326,91 @@ export function init(dir, prefix, prRepo = 'none') {
   return rows.length;
 }
 
+// ==== T4: next
+
+function today() {
+  if (process.env.LEDGER_TODAY) return process.env.LEDGER_TODAY;
+  const d = new Date();
+  const two = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+}
+
+function requireCleanIndex(dir, command) {
+  if (trim(git(dir, 'status', '--porcelain', '--', INDEX)) !== '') {
+    throw new LedgerError(`${command}: ${INDEX} has uncommitted changes; commit them first`);
+  }
+}
+
+// Write the index and commit it alone; each message is a paragraph of the commit message, the first its
+// subject. If the commit fails the file goes back to what it was, so the next command does not find a
+// half-made change.
+function commitIndex(dir, ix, ...message) {
+  const file = path.join(dir, INDEX);
+  const before = read(file);
+  write(file, formatIndex(ix));
+  try {
+    git(dir, 'commit', '-q', '--only', ...message.flatMap((p) => ['-m', p]), '--', INDEX);
+  } catch (e) {
+    write(file, before);
+    throw e;
+  }
+}
+
+// Run fn while holding the lock that the sessions of one checkout share: a directory under the git directory.
+// Two worktrees do not share it; check catches their duplicate number once they merge. Making a directory
+// that another process is removing can fail with EPERM on Windows, so that code means "held" too; when it
+// lasts to the deadline with no lock there, the lock cannot be made and the command refuses.
+function withLock(dir, command, waitMs, fn) {
+  const lock = path.join(path.resolve(dir, trim(git(dir, 'rev-parse', '--git-dir'))), 'ledger-next.lock');
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try { fs.mkdirSync(lock); break; } catch (e) {
+      if (e.code !== 'EEXIST' && e.code !== 'EPERM') throw e;
+      if (Date.now() >= deadline) {
+        let age = 0;
+        try { age = Math.round((Date.now() - fs.statSync(lock).mtimeMs) / 1000); } catch {
+          if (e.code === 'EPERM') throw new LedgerError(`${command}: the lock ${lock} cannot be made (${e.code})`);
+          continue;
+        }
+        throw new LedgerError(`${command}: the lock ${lock} is ${age} s old; remove it by hand if no session is running next or merged`);
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    fs.rmdirSync(lock);
+  }
+}
+
+// Reserve the next ruling number: a `reserved` row, committed alone, under the lock.
+export function next(dir, { waitMs = 10000 } = {}) {
+  return withLock(dir, 'next', waitMs, () => {
+    requireCleanIndex(dir, 'next');
+    const { ix } = loadRepo(dir);
+    const prefix = ix.settings.prefix;
+    // Every line of either file that begins like a numbered entry counts, whatever stands above it, and so does
+    // every row. A paragraph entry written with no blank line above it is not found as an entry, and its number
+    // is taken all the same.
+    const headingLine = new RegExp(`^(?:- \\*\\*|## )${prefix}(\\d+)[ .(:]|^${prefix}(\\d+)\\. `, 'gm');
+    const rowId = new RegExp(`^${prefix}(\\d+)$`);
+    let max = 0;
+    for (const f of [ACTIVE, SETTLED]) {
+      if (!fs.existsSync(path.join(dir, f))) continue;
+      for (const m of read(path.join(dir, f)).matchAll(headingLine)) max = Math.max(max, Number(m[1] || m[2]));
+    }
+    for (const r of ix.rows) {
+      const m = r.id.match(rowId);
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+    const id = prefix + (max + 1);
+    ix.rows.push({ id, date: today(), status: 'reserved', round: '', pr: 'none', 'superseded-by': '', file: ACTIVE, title: '' });
+    commitIndex(dir, ix, `Ledger: reserve ${id}`);
+    return id;
+  });
+}
+
 // ==== CLI
 
 function main(argv) {
@@ -343,6 +428,9 @@ function main(argv) {
     }
     case 'init':
       console.log(`${INDEX} written: ${init(dir, args[0], args[1])} rulings, all unclassified`);
+      return 0;
+    case 'next':
+      console.log(next(dir));
       return 0;
     default:
       throw new LedgerError('usage: ledger.mjs <list|check|next|merged|move|init> [args]');

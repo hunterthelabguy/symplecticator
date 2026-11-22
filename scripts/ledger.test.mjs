@@ -400,3 +400,139 @@ test('init refuses outside a git repository, writing nothing', (t) => {
   assert.deepEqual(fs.readdirSync(dir), ['LEDGER.md']);
   assert.equal(get(dir, 'LEDGER.md'), ledger('R1'));
 });
+
+// ==== T4: next
+
+test('next reserves the number after the highest in either file or the index, and commits the index alone', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1', 'R2'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing'], ['R2', 'round']]) });
+  put(dir, 'notes.txt', 'someone else is working here\n');
+  assert.equal(L.next(dir), 'R3');
+  assert.deepEqual(L.parseIndex(get(dir, 'LEDGER_INDEX.md')).rows[2], { id: 'R3', date: '2030-01-02', status: 'reserved', round: '', pr: 'none', 'superseded-by': '', file: 'LEDGER.md', title: '' });
+  assert.equal(git(dir, 'log', '-1', '--format=%s').trim(), 'Ledger: reserve R3');
+  assert.equal(git(dir, 'show', '--name-only', '--format=', 'HEAD').trim(), 'LEDGER_INDEX.md');
+  assert.equal(git(dir, 'status', '--porcelain').trim(), '?? notes.txt');
+  const run = cli(dir, 'next');
+  assert.equal(run.stdout, 'R4\n');
+
+  const settledHigh = repo(t, { 'LEDGER.md': ledger('K1'), 'LEDGER_SETTLED.md': ledger('K9'), 'LEDGER_INDEX.md': index('K', [['K1', 'standing'], ['K9', 'settled', 'LEDGER_SETTLED.md']]) });
+  assert.equal(L.next(settledHigh), 'K10');
+  const reservedHigh = repo(t, { 'LEDGER.md': ledger('K1'), 'LEDGER_INDEX.md': index('K', [['K1', 'standing'], ['K30', 'reserved']]) });
+  assert.equal(L.next(reservedHigh), 'K31');
+  const noRowHigh = repo(t, { 'LEDGER.md': ledger('K1', 'K50'), 'LEDGER_INDEX.md': index('K', [['K1', 'standing']]) });
+  assert.equal(L.next(noRowHigh), 'K51');
+  const noRowBullet = repo(t, { 'LEDGER.md': '# T\n\n- **K1 (a).** "x"\n- **K60 (b).** "y"\n', 'LEDGER_INDEX.md': index('K', [['K1', 'standing']]) });
+  assert.equal(L.next(noRowBullet), 'K61');
+});
+
+test('next counts every line that begins like an entry, whatever the line above it', (t) => {
+  for (const p of ['L', 'K']) {
+    // Paragraph entries with no blank line between them: only the first of each file is found as an entry.
+    const tight = (a, b) => `# T\n\n## 2030-01-01: a session\n\n${p}${a}. "a"\nNote: one.\n${p}${b}. "b"\nNote: two.\n`;
+    assert.deepEqual(ids(tight(1, 2), p), [null, null, `${p}1`]);
+    const active = repo(t, { 'LEDGER.md': tight(1, 2), 'LEDGER_INDEX.md': index(p, [[`${p}1`, 'standing']]) });
+    assert.deepEqual(L.check(active).problems, []);
+    assert.equal(L.next(active), `${p}3`);
+    const settled = repo(t, {
+      'LEDGER.md': tight(1, 2), 'LEDGER_SETTLED.md': tight(3, 4),
+      'LEDGER_INDEX.md': index(p, [[`${p}1`, 'standing'], [`${p}3`, 'settled', 'LEDGER_SETTLED.md']]),
+    });
+    assert.deepEqual(L.check(settled).problems, []);
+    assert.equal(L.next(settled), `${p}5`);
+  }
+});
+
+test('next counts no line that only looks like an entry, and counts one inside a fenced block', (t) => {
+  const rows = [['R1', 'standing'], ['R2', 'standing']];
+  const withLines = (...lines) => `# T\n\n${entry('R1')}## R2 (2030-01-02): b\n\n${lines.join('\n')}\n`;
+  // Indented; another prefix; a longer prefix that ends in this one; a letter after the digits; no space after
+  // the full stop; the number in the middle of a line.
+  const looksLike = ['  ## R90 (2030-01-03): c', 'K90. "x"', 'RR90. "x"', '- **R90a (c).** "x"', 'R90.5 is a figure', 'see R90. and on'];
+  const dir = repo(t, { 'LEDGER.md': withLines(...looksLike), 'LEDGER_INDEX.md': index('R', rows) });
+  assert.deepEqual(L.check(dir).problems, []);
+  assert.equal(L.next(dir), 'R3');
+  // A line inside a fenced block is no entry, and its number is taken all the same.
+  const fenced = repo(t, { 'LEDGER.md': withLines('~~~', 'R50. "an example"', '~~~'), 'LEDGER_INDEX.md': index('R', rows) });
+  assert.deepEqual(L.check(fenced).problems, []);
+  assert.equal(L.next(fenced), 'R51');
+});
+
+test('next refuses when the index has uncommitted changes, and leaves no lock behind', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing']]) });
+  const dirty = get(dir, 'LEDGER_INDEX.md') + '\n';
+  put(dir, 'LEDGER_INDEX.md', dirty);
+  refuses(() => L.next(dir), /next: LEDGER_INDEX\.md has uncommitted changes; commit them first/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), dirty);
+  assert.ok(!fs.existsSync(at(dir, LOCK)));
+});
+
+test('next refuses while another holds the lock, and names its age', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing']]) });
+  fs.mkdirSync(at(dir, LOCK));
+  const before = get(dir, 'LEDGER_INDEX.md');
+  refuses(() => L.next(dir, { waitMs: 0 }), /^next: the lock .*ledger-next\.lock is \d+ s old; remove it by hand/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), before);
+  assert.ok(fs.existsSync(at(dir, LOCK)));
+});
+
+test('next takes EPERM from making the lock as the lock held, and refuses when it lasts', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing']]) });
+  // The script and this file share one fs object, so the failure can be made here.
+  const mkdirSync = fs.mkdirSync;
+  t.after(() => { fs.mkdirSync = mkdirSync; });
+  let failures = 1;
+  fs.mkdirSync = (target, ...rest) => {
+    if (!String(target).endsWith('ledger-next.lock') || failures-- <= 0) return mkdirSync(target, ...rest);
+    throw Object.assign(new Error('EPERM: operation not permitted, mkdir'), { code: 'EPERM' });
+  };
+  // Once, as when another process is removing the lock: next waits and takes it.
+  assert.equal(L.next(dir, { waitMs: 1000 }), 'R2');
+  // Every time: no lock can be made, and next refuses.
+  failures = Infinity;
+  const reserved = get(dir, 'LEDGER_INDEX.md');
+  refuses(() => L.next(dir, { waitMs: 0 }), /the lock .*ledger-next\.lock cannot be made \(EPERM\)$/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), reserved);
+  assert.ok(!fs.existsSync(at(dir, LOCK)));
+});
+
+test('two next calls at once yield two different numbers', async (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing']]) });
+  const call = () => new Promise((resolve) => {
+    const child = spawn(process.execPath, [SCRIPT, 'next'], { cwd: dir });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    child.on('close', (code) => resolve([code, out.trim()]));
+  });
+  const results = await Promise.all([call(), call(), call()]);
+  assert.deepEqual(results.map((r) => r[0]), [0, 0, 0]);
+  assert.deepEqual(results.map((r) => r[1]).sort(), ['R2', 'R3', 'R4']);
+  assert.deepEqual(L.check(dir).problems, []);
+});
+
+test('next restores the index and refuses when its commit fails', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing']]) });
+  const before = get(dir, 'LEDGER_INDEX.md');
+  fs.mkdirSync(at(dir, '.git/hooks'), { recursive: true });
+  fs.writeFileSync(at(dir, '.git/hooks/pre-commit'), '#!/bin/sh\necho "the hook says no" >&2\nexit 1\n');
+  fs.chmodSync(at(dir, '.git/hooks/pre-commit'), 0o755);
+  refuses(() => L.next(dir), /^git commit failed: the hook says no$/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), before);
+  assert.equal(git(dir, 'status', '--porcelain').trim(), '');
+  assert.ok(!fs.existsSync(at(dir, LOCK)));
+  const run = cli(dir, 'next');
+  assert.equal(run.status, 2);
+  assert.equal(run.stderr, 'git commit failed: the hook says no\n');
+  fs.rmSync(at(dir, '.git/hooks/pre-commit'));
+  assert.equal(L.next(dir), 'R2');
+});
+
+test('outside a git repository next refuses with exit 2', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-test-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  put(dir, 'LEDGER.md', ledger('R1'));
+  put(dir, 'LEDGER_INDEX.md', index('R', [['R1', 'standing']]));
+  // The ceiling keeps git from finding a repository above the temp folder.
+  const run = spawnSync(process.execPath, [SCRIPT, 'next'], { cwd: dir, encoding: 'utf8', env: { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(dir) } });
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^git rev-parse failed: fatal: not a git repository/);
+  assert.equal(get(dir, 'LEDGER_INDEX.md'), index('R', [['R1', 'standing']]));
+});
