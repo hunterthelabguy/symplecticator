@@ -75,5 +75,12 @@ Tests are exactly as thick as the spec, measured, not felt. Mutation testing
 (mutmut for Python) is the instrument. A surviving mutant means dead code or
 a missing test, and the spec decides which, which is why the spec is written
 and hardened before the code. A test that kills no mutant the others miss is
-dead weight. Deterministic first: the tool enumerates survivors; the agent
-adjudicates each one citing the spec line it rests on.
+dead weight. A test is also too thick when it fails on a behavior-preserving
+change: a type-only pass with exact goldens is the free calibration, and any
+test failing there pins the implementation, not the spec. The score per
+area is a ratchet taken from a scheduled run and asserted in CI against the
+committed number, never run per PR. Order of work on a legacy area: measure
+the net, thicken to the floor, then simplify or port. Limit: a wrong
+constant with a golden pinned to it survives every mutant; only a
+spec-derived test catches it. Deterministic first: the tool enumerates
+survivors; the agent adjudicates each one citing the spec line it rests on.
