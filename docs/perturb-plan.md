@@ -86,8 +86,9 @@ run once.
   A skill's frontmatter PreToolUse hook fires once the skill is invoked and
   stays for the session, in the main conversation only: a subagent's tool
   calls never reached it. That probe used matcher `Bash` and a
-  model-invocable skill; the preflight below probes the matcher `.*`, a
-  user-invoked skill and a hook timeout.
+  model-invocable skill; the live check after merge tries the matcher
+  `.*` and a user-invoked skill (the preflight below holds the probe for a
+  run by hand).
 - The matcher `.*`, as Claude Code 2.1.330's own code reads it (checked in
   the installed binary during fold 2 and again by pass 3): for PreToolUse, a
   matcher that fits the class `/^[a-zA-Z0-9_|, -]+$/` (letters, digits, `_`,
@@ -181,11 +182,15 @@ run once.
 | `templates/charter.template.md` | modify | Conjugate pass; the `/perturb` line; the cap |
 | `README.md`, `CLAUDE.md`, `.github/workflows/test.yml` | modify | List the new pieces, node and a Daily use step; the verify line says what runs where; CI runs all five suites on Linux and macOS and the guard suite on Windows |
 
-## Preflight (before `/build`)
+## Preflight (not a precondition for `/build`)
 
-The owner runs this in a throwaway session, since it needs a user-invoked
-skill; it records answers the design rests on, and changes no plan task
-unless one fails.
+Not run before `/build` (the owner's ruling, 2026-11-22): `/build` never
+runs under the hook. Step 5 is answered from Claude Code's own code, below.
+Steps 2 and 3 are covered by the live check (After merge, step 7), which
+runs before `/perturb` is first used; step 4 needs no answer for safety,
+since the guard's own scan timeout refuses first. A failure in the live
+check reopens T3 or T2. The steps stay here for a run by hand: it needs a
+user-invoked skill, so the owner runs it in a throwaway session.
 
 1. Write `~/.claude/skills/perturb-probe/SKILL.md`: frontmatter
    `name: perturb-probe`, `disable-model-invocation: true`, and a hooks
@@ -220,6 +225,11 @@ unless one fails.
    literal `cd`, and refuses a call after a `cd` it could not read; (c) the
    SKILL alone asks Claude to repeat its `cd` in every call, which the
    guard cannot check. Remove `probe-sub` after.
+   Answered on 2026-11-22 from Claude Code 2.1.330's code, not a live run:
+   the hook input's `cwd` is the session's working folder, which Claude
+   Code updates from the shell's folder after every Bash command, so it
+   follows a `cd` that persists, and T2 stands. A later release could
+   change this; the live check's `cd` call catches it.
 6. Remove the probe skill and the log.
 
 Pull requests #4, #8, #9 and #11 touched files this plan modifies
@@ -2236,10 +2246,12 @@ grep -rnE '\b[KRL][0-9]{1,3}[a-z]?\b' $F
    with the guard's reason: a Bash push to the default branch; a Write to
    `~/.claude/settings.json`; an Agent call; one MCP tool (a session
    starter, if connected); a commit whose message holds a scan-list value;
-   a browser `computer` click. A Read and a browser screenshot pass. Record the results beside the build report.
+   a browser `computer` click; and, after `mkdir -p sub && cd sub` in one
+   Bash call, `rm ../.claude/settings.json` in the next. A Read and a
+   browser screenshot pass. Record the results beside the build report.
 
 ## Overnight readiness
 
 Every task names its seams and verify command, and no task waits on an open
-pull request. Attended `/build` can run T1 to T6 once the preflight has
-run.
+pull request. Attended or overnight `/build` can run T1 to T6; the
+preflight is not a precondition (see Preflight).
