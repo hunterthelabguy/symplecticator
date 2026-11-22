@@ -52,6 +52,21 @@ and run on Windows (Git Bash, node 24); each red and green line quoted is
 from those runs. Choices the rulings did not settle are marked "Choice for
 the owner's review".
 
+Folded 2026-11-22: executing critique pass 3 and the owner's rulings on it.
+A recursive `cp` (`-r`, `-R`, `-a`) is refused when what lands holds
+protected config. The commands inside `$(...)`, backticks, `<(...)` and
+`>(...)`, quoted or not, are parsed and count as commands before the one
+that holds them, so a commit or push call may hold no substitution but a
+heredoc read with a quoted delimiter; `$((...))` hides nothing; `/c` alone
+reads as `C:/`; `--fil` reads as `--file`. The browser's read-only tools
+(navigate, read, find, resize, the tab list, and screenshots) join the safe
+list, and the SKILL checks a result at phone width. The preflight gains a
+probe of the hook's `cwd` after a `cd`. After merge step 3 changes
+`leak-scan.sh` to read the login name at run time. New tests pin pass 3's
+surviving mutants; the list of misses is extended. Every code block was
+built again in a scratch tree of 9717339 on Windows, and every named mutant
+run once.
+
 ## Global constraints
 
 - Public repository: say "you" to the reader and "the owner" in
@@ -74,9 +89,10 @@ the owner's review".
   model-invocable skill; the preflight below probes the matcher `.*`, a
   user-invoked skill and a hook timeout.
 - The matcher `.*`, as Claude Code 2.1.330's own code reads it (checked in
-  the installed binary during this fold): a matcher made only of letters,
-  digits, `_` and `|` is a list of exact tool names (so `Edit` never matched
-  `MultiEdit`); any other matcher is compiled with `new RegExp` and tested
+  the installed binary during fold 2 and again by pass 3): for PreToolUse, a
+  matcher that fits the class `/^[a-zA-Z0-9_|, -]+$/` (letters, digits, `_`,
+  `|`, comma, space and hyphen) is a list of exact tool names, split on `|`
+  or `,` (so `Edit` never matched `MultiEdit`); any other matcher is compiled with `new RegExp` and tested
   with `.test`, unanchored, so `.*` matches every tool name, MCP tools
   included; `*` and an empty matcher are also special-cased to match all.
   The same code rejects some regex matchers in cloud sessions; `.*` was not
@@ -122,6 +138,20 @@ the owner's review".
     meets the guard.
   - WebSearch, WebFetch: read the web, write nothing local; research is
     part of finding what is possible.
+  - The built-in browser's `mcp__Claude_Browser__navigate`, `read_page`,
+    `get_page_text`, `find`, `resize_window` and `tabs_context`, and its
+    `computer` tool only when `action` is `screenshot` or `zoom`: the
+    owner's ruled scope, "navigate, screenshot, read and resize only;
+    clicks and form input stay refused". `preview_start` (it starts a server
+    from a config command), `javascript_tool`, `form_input`, `computer`
+    clicks, typing, keys and scrolls, the console and network readers, and
+    tab creation, selection and closing stay refused. The same tools under
+    the `mcp__remote-devices__Claude_Browser__` prefix are not added (Choice
+    for the owner's review): that prefix appears only in a cloud session
+    linked to the owner's computer, where the hook runs in the cloud and
+    `~/.claude/scripts/perturb-guard.mjs` is not installed, so the entries
+    could not be reached or tested; add them with the same rule if
+    `/perturb` ever runs there.
   Left off, so refused: TaskStop and other task tools (Bash's `kill`
   stops what Bash started), and every MCP tool not named above.
 - The default branch is `refs/remotes/origin/HEAD`'s target, else `main`.
@@ -143,7 +173,7 @@ the owner's review".
 | `scripts/perturb-guard.mjs` | create | The PreToolUse dispatcher |
 | `scripts/perturb-guard.test.mjs` | create | One fixture per refusal row, each with an allowed neighbor |
 | `skills/perturb/SKILL.md` | create | The user-only command and its frontmatter hook |
-| `scripts/perturb-hook.test.sh` | create | The frontmatter's hooks block word for word, the user-only line, and the hook command run as written: node missing, guard missing, an allowed call |
+| `scripts/perturb-hook.test.sh` | create | The frontmatter's hooks block word for word, the user-only line, the guard's scan timeout under the hook's, and the hook command run as written: node missing, guard missing, an allowed call |
 | `skills/frames/SKILL.md`, `skills/frames/frames-examples.md` | create | Generators and checks; real bets only |
 | `scripts/ground-truth.sh`, `scripts/ground-truth.test.sh` | modify | Old showcase branches, local or pushed, each once |
 | `commands/handoff.md` | modify | Ask per old showcase branch; ruling-count line |
@@ -173,7 +203,24 @@ unless one fails.
    the 5 s timeout fired. If it ran, a hook timeout lets calls through, and
    the guard's own scan timeout (20 s, under the hook's 30) is what keeps a
    slow scan from passing a commit; if it was refused, note it.
-5. Remove the probe skill and the log.
+5. The hook's `cwd` after a `cd`: start the session in a git repo, Bash
+   `mkdir -p probe-sub && cd probe-sub` in one call, then `echo probecwd`
+   in the next. Read the `cwd` field of that call's log line. Every relative
+   path, the default branch and the scan's repo resolve against it. If it
+   names `probe-sub`, the hook follows the shell and T2 stands. If it names
+   the start folder, a `cd` in one call and a relative write or `rm` in the
+   next resolve against the wrong folder (`cd ~/.claude`, then
+   `rm -rf scripts`, would pass). That result is reported to the owner
+   before `/build`, not assumed; T2 is not changed on a guess. The options
+   to put to the owner then: (a) the guard refuses a Bash call whose `cd`
+   persists (a top-level `cd`, not one inside `( )`), and the SKILL says
+   to use `git -C` and `( cd <dir> && ... )`, so the shell never leaves
+   the folder the hook reports; (b) the guard keeps the shell's folder
+   itself, in a per-session file keyed by `session_id`, from each call's
+   literal `cd`, and refuses a call after a `cd` it could not read; (c) the
+   SKILL alone asks Claude to repeat its `cd` in every call, which the
+   guard cannot check. Remove `probe-sub` after.
+6. Remove the probe skill and the log.
 
 Open pull requests #4 (`CLAUDE.md`, `README.md`, `skills/build/SKILL.md`),
 #8 (`commands/handoff.md`, `scripts/build-stop-gate.test.sh`,
@@ -205,8 +252,11 @@ the tracked files in the working tree (`git grep`). Reads
 CRLF endings and a last line with no newline accepted, matching
 case-insensitive. Untracked files are not scanned: they are not part of
 the commit, and the guard (T2) refuses a commit that follows `git add` or
-any other command in the same call, so whatever a commit takes was staged,
-and is in the index, before the guard runs. Binary files are skipped
+any other command in the same call, a command inside a substitution in the
+commit itself included (bash runs those first), so whatever a commit takes
+is in the index or in the tracked files before the guard runs; the one
+route left, an alternate index (`GIT_INDEX_FILE`), is in the T2 intro's
+list of misses. Binary files are skipped
 (`git grep -I`); see the T2 intro's list of misses.
 **Verify:** `bash scripts/commit-scan.test.sh`
 
@@ -216,7 +266,7 @@ and is in the index, before the guard runs. Binary files are skipped
 #!/usr/bin/env bash
 #
 # commit-scan.test.sh: prove commit-scan.sh can fail. A throwaway HOME holds the pattern list and a throwaway
-# repo holds the files: a clean tree, a hit in a tracked file (listed once, though both passes see it), a hit in a
+# repo holds the files: a clean tree, hits in a tracked file (each listed once, though both passes see it), a hit in a
 # staged new file, a hit staged but gone from the working tree, an unstaged edit in a tracked file (what
 # `commit -a` would add), different hits in the index and the working tree, a scan started from a subfolder, the
 # second of two rules, a rule that starts with a dash, case, a message file by absolute, relative and backslash
@@ -258,13 +308,14 @@ run "$T/out" "$T/repo"; code=$?
 check "clean tree: exit 0" [ "$code" = 0 ]
 check "clean tree: no output" empty "$T/out"
 
-echo "qwopler was here" >tracked.txt && git add tracked.txt && git commit -qm tracked
+printf 'qwopler was here\nnothing\nqwopler again\n' >tracked.txt && git add tracked.txt && git commit -qm tracked
 run "$T/out" "$T/repo"; code=$?
 check "hit in a tracked file: exit 1" [ "$code" = 1 ]
 check "hit in a tracked file: the second rule's label" has "$T/out" "== login name"
 check "hit in a tracked file: no label for the rule with no hit" lacks "$T/out" "== legal name"
 check "hit in a tracked file: file, line and text" has "$T/out" "tracked.txt:1: qwopler was here"
 check "hit in a tracked file: listed once" once "$T/out" "tracked.txt:1: qwopler was here"
+check "hit in a tracked file: every hit line" has "$T/out" "tracked.txt:3: qwopler again"
 run "$T/out" "$T/repo/sub"; code=$?
 check "scan from a subfolder: still sees the top-level file" has "$T/out" "tracked.txt:1: qwopler was here"
 git rm -q tracked.txt && git commit -qm untrack
@@ -353,7 +404,7 @@ echo "commit-scan.test.sh: all passed"
   `ok    hit in a tracked file: no label for the rule with no hit` (an
   absence check passes with nothing to read), since
   `scripts/commit-scan.sh` does not exist. The scratch run began
-  `FAIL  clean tree: exit 0` and ended `commit-scan.test.sh: 35 FAILED`;
+  `FAIL  clean tree: exit 0` and ended `commit-scan.test.sh: 36 FAILED`;
   copy the first FAIL line from your run into the commit body.
 - [ ] Minimal implementation `scripts/commit-scan.sh`:
 
@@ -423,32 +474,40 @@ exit $status
 
 - [ ] Run it; expected: `commit-scan.test.sh: all passed`.
 - [ ] Mutant runs, one at a time against the full T1 suite, restored after
-  each (all 18 were killed in the scratch run, by the checks named; "alone"
-  marks a check that was the only one to kill it):
-  (a) delete `-i` from the `git grep` line: "staged new file, other case";
-  (b) `for where in --cached --no-cached` to `for where in --no-cached`:
-  "hit staged, gone from the working tree"; (c) `[ "$rules" = 0 ]` to
-  `false`: "a list with no rules"; (d) delete the `tr '\\' '/'` line:
-  "message file, backslash path" alone; (e) `git -C "$top" grep` to
-  `git -C "$repo" grep`: "scan from a subfolder" alone; (f) replace the git
-  grep `[ "$rc" -le 1 ]` test with `true`: "a regex grep cannot read";
-  (g) replace `[ -f "$msg" ]` with `true`: "missing message file: says so"
-  alone; (h) delete the CR strip: "CRLF list: the CRLF rule hits" alone;
-  (i) delete `|| [ -n "$line" ]`: "the last rule, with no newline, hits"
-  alone; (j) delete `-i` from the message grep: "message file, other case"
-  alone; (k) `for where in --cached`: "unstaged edit in a tracked file"
-  alone; (l) drop `| sort -u`: "hit in a tracked file: listed once" alone;
-  (m) drop `-e` before the regex: "clean tree" and "a rule that starts with
-  a dash" (the dash rule reads as an option); (n) drop `--` in the message
+  each (all 19 named here were killed in fold 3's scratch run, by the checks
+  named; "alone" marks a check that was the only one to kill it):
+  (a) delete `-i` from the `git grep` line: "staged new file, other case"
+  and the two staged-hit checks; (b) `for where in --cached --no-cached` to
+  `for where in --no-cached`: "hit staged, gone from the working tree" and
+  "different hits"; (c) `[ "$rules" = 0 ]` to `false`: "a list with no
+  rules"; (d) delete the `tr '\\' '/'` line: "message file, backslash path"
+  alone; (e) `git -C "$top" grep` to `git -C "$repo" grep`: "scan from a
+  subfolder" alone; (f) replace the git grep `[ "$rc" -le 1 ]` test with
+  `true`: "a regex grep cannot read"; (g) replace `[ -f "$msg" ]` with
+  `true`: "missing message file: says so" alone; (h) delete the CR strip:
+  "CRLF list: the CRLF rule hits" alone; (i) delete `|| [ -n "$line" ]`:
+  "the last rule, with no newline, hits" alone; (j) delete `-i` from the
+  message grep: "message file, other case" alone; (k) `for where in
+  --cached`: "unstaged edit in a tracked file" alone; (l) drop `| sort -u`:
+  "hit in a tracked file: listed once" alone; (m) drop `-e` before the
+  regex: "clean tree", "a rule that starts with a dash" and "clean message
+  file" (the dash rule reads as an option); (n) drop `--` in the message
   grep: "a rule that starts with a dash: the message hit" alone; (o) the
   message hits replace the file hits: "hits in a file and the message: the
   file" alone; (p) the working-tree pass replaces the index pass's hits:
   "different hits staged and in the working tree: the staged one" alone;
   (q) drop the `sed` that puts a space after a file hit's line number:
   every file-hit check; (r) the message hit printed without that space:
-  every message-hit check.
-  Not covered, left for the owner: `-I` (dropping it scans binary files;
-  only a test pinning the miss would kill it).
+  every message-hit check; (s) a `sed -n '1s/.../p'` that keeps only the
+  first hit line of each pass: "hit in a tracked file: every hit line"
+  alone. Pass 3 also killed a missing-list check removed, not-a-repo
+  exiting 0, and comment or blank lines not skipped.
+  Not covered, left for the owner (each survived fold 3's run): `-I`
+  (dropping it scans binary files; only a test pinning the miss would kill
+  it); the label or the regex split at the last tab, not the first (a rule
+  whose regex holds a tab would tell them apart); and the message grep's
+  `[ "$rc" -le 1 ]` test replaced with `true` (no regex `git grep` accepts
+  and `grep` rejects was found to pin it).
 - [ ] Commit: `Scripts: commit-scan, the pre-commit privacy scan`, body: why
   a missing or empty list, a bad regex and a missing message refuse, and why
   the scan reads the index, and the `file:line: text` form.
@@ -482,29 +541,57 @@ assignments, the wrappers `time`, `env`, `command`, `nohup`, `exec`,
 backslash line continuations, `#` comments (a `#` that starts a word,
 outside quotes), heredoc bodies to their delimiter (quoted or not, and
 `<<-`), redirections with their descriptor number (`2>&1`, `2>/dev/null`,
-`>&`, `&>`, `>|`), `gh -R` and `--repo`, and the unquoted form of `$(...)`
-(its parentheses separate commands). A call that ends with a quote still
-open is refused. Known misses, which pass:
-- `bash -c`, `eval`, `xargs`, `sh -c`, a quoted `$(...)` or backticks,
-  shell variables other than `HOME`, `gh api`, `perl -pi`, `node -e`,
+`>&`, `&>`, `>|`), `gh -R` and `--repo`, and the commands inside `$(...)`,
+backticks, `<(...)` and `>(...)`, quoted or not: they are parsed as
+commands of their own and count as commands before the one that holds them,
+since bash runs them first. A substitution that only reads a heredoc with a
+quoted delimiter (`"$(cat <<'EOF' ... EOF)"`) runs nothing, so it alone may
+come before a commit; an apostrophe or a lone `"` in that heredoc is body
+text. `$((...))` parses the same way, so a `<<` in it hides nothing after
+it. A call that ends with a quote or a substitution still open is refused.
+Known misses, which pass:
+- `bash -c`, `eval`, `xargs`, `sh -c`, the value a substitution or a shell
+  variable other than `HOME` stands for (`echo x > "$(echo ~/.claude/CLAUDE.md)"`),
+  brace expansion (`rm -rf ~/.claude/{scripts,x}`,
+  `cp x ~/.claude/{settings.json,y}`), `gh api`, `perl -pi`, `node -e`,
   `python`, `curl -o`, `install`, `dd`, `ln`, `truncate`, `touch`,
   `mkdir`, `tar -C`, `unzip -d`, `rsync`, `git mv`, `find -delete`,
   `unlink`, `rmdir`, `chmod`, and git or gh named by a path (`/usr/bin/git`,
   `git.exe`).
+- An unquoted heredoc's body is skipped, so a `$(...)` in it runs unseen
+  (`cat <<EOF` / `$(rm -rf ~/.claude)` / `EOF`); so is `((...))` without
+  `$`, whose `<<` reads as a heredoc.
 - git run inside `~/.claude` that rewrites tracked files: `checkout --`,
-  `restore`, `reset --hard`, `clean`, `stash`.
+  `restore`, `reset --hard`, `clean`, `stash`, `rm`.
 - `sed -Ei` and other clusters holding `i`, and sed with two files (only
   the last is checked); `cp` or `mv` with `-t` inside a cluster.
 - `git --git-dir`, `--work-tree` and `--namespace` given as a separate word
   (the value is read as the subcommand), and a push from another repo than
   the one the guard resolves.
-- `cd -` and a bare `cd`, and a protected path spelled `$USERPROFILE`.
+- Refs the push check does not resolve: `heads/<default>`, and the default
+  branch in other case, which a case-insensitive remote disk reads as the
+  same ref.
+- Folder changes the parse does not follow: `cd -`, a bare `cd`, `pushd`,
+  `popd`, `env -C` (its folder is skipped as a value, not followed), and a
+  protected path spelled `$USERPROFILE`.
 - On Windows, a trailing dot or `::$DATA` on a protected name (Windows drops
   the dot and writes the same file); on macOS, other case on a
   case-insensitive disk (the guard folds case on Windows only).
 - The scan (T1) skips binary files (`git grep -I`), UTF-16 files (git reads
   them as binary) and file names; it does not read tag, merge or
-  cherry-pick messages, or `--author` and `-c user.name`.
+  cherry-pick messages, a message taken from a commit (`-C`, `-c`) or a
+  template (`-t` with `GIT_EDITOR=true`), `--author` and `-c user.name`,
+  or an alternate index (`GIT_INDEX_FILE=`; the scan reads the default
+  one). On Linux and macOS, `-F /dev/fd/0 < m.txt` makes the guard read
+  its own spent stdin, so the message scans empty while git reads `m.txt`
+  (unrun there; on Windows the path does not exist and the commit is
+  refused).
+
+Known false refusals: `cd "$(git rev-parse --show-toplevel)" && git commit`
+(the substitution counts as a command before the commit; `cd` to the
+folder by its path), and, if Claude Code ever sends a Git
+Bash `/c/...` form as the hook's `cwd` (unseen so far), every push and
+commit, since git is handed that folder unconverted and cannot answer.
 
 - [ ] Write the failing test `scripts/perturb-guard.test.mjs`:
 
@@ -578,6 +665,7 @@ test('push: feature branch allowed, default branch refused', () => {
   refused(bash('git push origin trunk'), 'trunk');
   refused(bash("git push origin 'trunk'"), 'trunk');
   refused(bash('git push origin tr\\unk'), 'trunk');
+  refused(bash('git push origin "tr\\\nunk"'), 'trunk');
   refused(bash('git push origin HEAD:trunk'), 'trunk');
   refused(bash('git push origin HEAD:refs/heads/trunk'), 'trunk');
 });
@@ -606,6 +694,7 @@ test('push: redirections and option values are not refspecs; an unknown option r
   allowed(bash('git push -o ci.skip origin feat 2>&1'));
   refused(bash('git push --frobnicate origin feat'), 'does not know');
   refused(bash('git push -uz origin feat'), 'does not know');
+  onFeat(() => refused(bash('git push -oci.skip origin trunk'), 'trunk'));
 });
 test('--all, --mirror and glob refspecs refused, even off the default branch', () => {
   onFeat(() => {
@@ -644,6 +733,7 @@ test('prefixes, wrappers and env assignments before git are skipped', () => {
     'while git push origin trunk; do :; done', 'until git push origin trunk; do :; done',
     'for x in 1; do git push origin trunk; done', '! git push origin trunk', 'time git push origin trunk',
     'env X=1 git push origin trunk', 'env -i git push origin trunk', 'env -u X git push origin trunk',
+    'env -C . git push origin trunk',
     'command git push origin trunk', 'nohup git push origin trunk', 'exec git push origin trunk',
     'timeout 60 git push origin trunk', 'timeout -k 5 60 git push origin trunk', 'nice -n 5 git push origin trunk',
     'sudo -u x git push origin trunk', 'git \\\n  push origin trunk']) {
@@ -657,13 +747,29 @@ test('comments and heredoc bodies are skipped; a quote left open refuses', () =>
   refused(bash("cat > n.txt <<'EOF'\nthe owner's note\nEOF\nrm -rf ~/.claude"), 'protected');
   refused(bash('cat > n.txt <<EOF\nthe owner\'s note\nEOF\nrm -rf ~/.claude'), 'protected');
   refused(bash('cat > n.txt <<-"EOF"\n\tthe owner\'s note\n\tEOF\nrm -rf ~/.claude'), 'protected');
+  refused(bash("cat > n.txt <<'EOF'\nbody\nEOF\necho a\nrm -rf ~/.claude"), 'protected');
   refused(bash('echo a\ngit push origin trunk'), 'git push');
   refused(bash('echo a#b; git push origin trunk'), 'git push');
   refused(bash('echo "it is open'), 'quote left open');
   allowed(bash("# don't forget the tests\ngit push origin feat"));
   allowed(bash("cat > n.txt <<'EOF'\nthe owner's note\nEOF\nrm -rf build"));
   allowed(bash("cat > n.md <<'EOF'\ngit push origin trunk\nEOF"));
+  allowed(bash("cat > n.md <<'EOF'\nEOFX\nrm -rf ~/.claude\nEOF"));
+  allowed(bash('cat > n.md <<EOF\n\tEOF\nrm -rf ~/.claude\nEOF'));
   allowed(bash("echo ok # that's all\ngh pr create --fill"));
+});
+test('$((...)) starts no heredoc; the commands inside a substitution, quoted or not, are parsed', () => {
+  refused(bash('x=$((1<<4))\ngit push origin trunk'), 'git push');
+  refused(bash('echo $((1<<2))\nrm -rf ~/.claude'), 'protected');
+  refused(bash('echo "$(rm -rf ~/.claude)"'), 'protected');
+  refused(bash('echo `rm -rf ~/.claude`'), 'protected');
+  refused(bash('diff <(rm -rf ~/.claude) a.txt'), 'protected');
+  refused(bash('echo "$( (cd /tmp); rm -rf ~/.claude )"'), 'protected');
+  refused(bash('echo "$(cat <<\'EOF\'\n"\nEOF\n)"; rm -rf ~/.claude #"'), 'protected');
+  refused(bash('echo "$(date'), 'substitution left open');
+  allowed(bash('echo $((1 << 4))'));
+  allowed(bash('x=$((1<<4)); echo $x'));
+  allowed(bash('echo "$(git rev-parse HEAD) `date`"'));
 });
 test('gh pr merge refused, with or without a repo flag; gh pr create allowed', () => {
   refused(bash('gh pr merge 12 --squash'), 'gh pr merge');
@@ -676,13 +782,17 @@ test('commit: scan clean allowed, scan hit refused (tracked file and every messa
   allowed(bash('git commit -m "a clean message"'));
   for (const c of ['git commit -m "signed zanzibar"', 'git commit -am "signed zanzibar"',
     'git commit --message "signed zanzibar"', 'git commit --message="signed zanzibar"', 'git commit -mzanzibar',
+    'git commit --mess "signed zanzibar"',
     'git commit -m "subject" -m "body zan""zibar"',
     'git commit -m "$(cat <<\'EOF\'\nsubject\n\nsay "quoted words" then zanzibar\nEOF\n)"']) {
     refused(bash(c), 'zanzibar');
   }
+  allowed(bash('git commit -m "$(cat <<\'EOF\'\nQuote handling\n\nTreat "don\'t" as one word.\nEOF\n)"'));
+  allowed(bash('git commit -m "$(cat <<\'EOF\'\nRulers\n\nA 12" ruler.\nEOF\n)"'));
   writeFileSync(join(T, 'msg.txt'), 'subject\n\nzanzibar\n');
-  for (const f of ['-F', '--file', '-aF']) refused(bash(`git commit ${f} "${join(T, 'msg.txt')}"`), 'zanzibar');
+  for (const f of ['-F', '--file', '--fil', '-aF']) refused(bash(`git commit ${f} "${join(T, 'msg.txt')}"`), 'zanzibar');
   refused(bash(`git commit --file="${join(T, 'msg.txt')}"`), 'zanzibar');
+  refused(bash(`git commit --fil="${join(T, 'msg.txt')}"`), 'zanzibar');
   refused(bash(`git commit -F"${join(T, 'msg.txt')}"`), 'zanzibar');
   refused(bash(`git commit -F "${join(T, 'no-msg.txt')}"`), 'no message file');
   writeFileSync(join(T, 'rel-msg.txt'), 'subject\n\nclean\n');
@@ -704,6 +814,9 @@ test('commit or push after another command in the same call refused; after cd al
   rmSync(join(REPO, 'new.txt'));
   refused(bash('echo x >> a.txt && git commit -am edit'), 'stage in one call');
   refused(bash('git commit -m clean && git push origin feat'), 'stage in one call');
+  for (const c of ['git commit -m x $(git add new.txt)', 'git commit -m x "$(git add new.txt)"',
+    'git commit -m x `git add new.txt`', 'git commit -m x <(git add new.txt)', 'git commit -m "$(printf \'za%s\' nzibar)"',
+    'git commit -m "$(cat <<EOF\nsubject\nEOF\n)"']) refused(bash(c), 'stage in one call');
   allowed(bash(`cd "${REPO}" && git commit -m clean`, { cwd: OTHER }));
   allowed(bash(`cd "${REPO}" && git push origin feat`, { cwd: OTHER }));
 });
@@ -711,6 +824,7 @@ test('commit: a message from stdin refused', () => {
   refused(bash('git commit -F -'), 'stdin');
   refused(bash('git commit -F-'), 'stdin');
   refused(bash('git commit --file=-'), 'stdin');
+  refused(bash('git commit --fil=-'), 'stdin');
   refused(bash('git commit -F /dev/stdin'), 'a message from stdin');
 });
 test('commit: any nonzero scan exit refuses, not only 1', () => {
@@ -753,6 +867,13 @@ test('Windows spellings: /c/ form and other case refused', { skip: process.platf
   const slash = C.replace(/^([A-Za-z]):/, (m, d) => `/${d.toLowerCase()}`).replace(/\\/g, '/');
   refused(run('Write', { file_path: `${slash}/settings.json` }), 'protected');
   refused(run('Write', { file_path: join(C.toUpperCase(), 'SETTINGS.JSON') }), 'protected');
+  const [drive, ...parts] = C.split(/[\\/]/);
+  refused(bash(`cd /${drive[0].toLowerCase()} && rm -rf ${parts.join('/')}`), 'protected');
+  allowed(bash(`cd /${drive[0].toLowerCase()} && rm -rf ${parts.join('/')}-not`));
+  // The raw command is scanned with the home folder read as ~, in its /c/ form and in other case too.
+  writeFileSync(join(HOME, 'clean-msg.txt'), 'subject\n\nclean\n');
+  allowed(bash(`git commit -F "${slash.replace(/\/\.claude$/, '')}/clean-msg.txt"`));
+  allowed(bash(`git commit -F "${HOME.toUpperCase()}\\clean-msg.txt"`));
 });
 test('Bash writes and removals in protected paths refused; the same elsewhere allowed', () => {
   refused(bash(`echo x > "${join(C, 'settings.json')}"`), 'protected');
@@ -772,11 +893,16 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   refused(bash('cp -r perturb/ ~/.claude/skills/'), 'protected');
   refused(bash('cp -t ~/.claude settings.json'), 'protected');
   refused(bash('cp --target-directory=~/.claude settings.json'), 'protected');
+  refused(bash(`cp -t"${C}" settings.json`), 'protected');
+  refused(bash('cp -r skills ~/.claude/'), 'protected');
+  refused(bash('cp -a skills ~/.claude'), 'protected');
+  refused(bash('cp -r . ~/.claude/'), 'protected');
   refused(bash('sed -i.bak s/a/b/ ~/.claude/PERSONAL-ADDENDUM.md'), 'protected');
   refused(bash('sed --in-place s/a/b/ ~/.claude/PERSONAL-ADDENDUM.md'), 'protected');
   refused(bash('rm ~/.claude/scripts/perturb-guard.mjs'), 'protected');
   refused(bash('rm -rf ~/.claude'), 'protected');
   refused(bash('rm -rf /'), 'protected');
+  refused(bash('rm -rf /*'), 'protected');
   refused(bash('rm -rf ~/.claude/*'), 'protected');
   refused(bash('rm ~/.claude/settings*.json'), 'protected');
   refused(bash('rm -rf ~/.cl*'), 'protected');
@@ -786,6 +912,8 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   allowed(bash('echo x 2>&1'));
   allowed(bash('cp a.txt b.txt'));
   allowed(bash('cp a.txt ~/.claude/notes/'));
+  allowed(bash('cp -r notes ~/.claude/'));
+  allowed(bash('cp -a skills ~/.claude/notes'));
   allowed(bash('mv b.txt c.txt'));
   allowed(bash('rm c.txt ~/.claude/other.txt'));
   allowed(bash('rm -f *.log ~/.claude/*.bak'));
@@ -806,6 +934,17 @@ test('only the safe tools pass: Agent, Workflow, the other shells, auto-merge, s
     allowed(run(t, { pattern: 'x' }));
   }
 });
+test('browser: navigate, read, resize and screenshots pass; clicks, typing, scripts and preview_start refused', () => {
+  const B = 'mcp__Claude_Browser__';
+  for (const t of ['navigate', 'read_page', 'get_page_text', 'find', 'resize_window', 'tabs_context']) {
+    allowed(run(B + t, { url: 'http://localhost:8080', preset: 'mobile' }));
+  }
+  allowed(run(`${B}computer`, { action: 'screenshot' }));
+  allowed(run(`${B}computer`, { action: 'zoom', region: [0, 0, 10, 10] }));
+  refused(run(`${B}computer`, { action: 'left_click', coordinate: [1, 1] }), 'left_click');
+  refused(run(`${B}computer`, { action: 'type', text: 'x' }), 'type');
+  for (const t of ['javascript_tool', 'form_input', 'preview_start', 'tabs_create']) refused(run(B + t, { text: 'x' }), B + t);
+});
 test('fails closed: malformed JSON, missing fields, a bad input shape', () => {
   for (const r of [run('Bash', {}, { raw: '{not json' }), run('Bash', {}, { raw: '{}' }),
     run('Bash', { nocommand: 1 }), run('Edit', {}),
@@ -819,8 +958,8 @@ test('fails closed: malformed JSON, missing fields, a bad input shape', () => {
 });
 ```
 
-- [ ] Run it; expected failure: all 21 tests fail (`ℹ pass 0`,
-  `ℹ fail 21`). The child's stderr names the missing module, reported
+- [ ] Run it; expected failure: all 23 tests fail (`ℹ pass 0`,
+  `ℹ fail 23`). The child's stderr names the missing module, reported
   through the first `assert.equal(r.code, ...)`; the scratch run printed
   `AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1459`
   and `code: 'MODULE_NOT_FOUND'`. Copy the first failing assertion line
@@ -833,11 +972,13 @@ test('fails closed: malformed JSON, missing fields, a bad input shape', () => {
 // perturb-guard.mjs: the PreToolUse hook /perturb registers from its frontmatter, for every tool, active from
 // invocation to the end of that session. It lets through a named list of safe tools and refuses every other tool,
 // MCP tools included (exit 2, reason on stderr). Of the safe tools, Edit, MultiEdit, Write and NotebookEdit are
-// refused on a protected path, Skill runs only frames, and Bash is parsed: it refuses pushes to the default branch,
+// refused on a protected path, Skill runs only frames, the browser's computer tool only takes screenshots, and Bash
+// is parsed: it refuses pushes to the default branch,
 // force pushes, --all, --mirror, glob refspecs and push options it does not know, gh pr merge, deleting a remote
 // branch outside showcase/, writes to or removal of the owner's protected config, git commit -F - (a message from
-// stdin is not scanned), a git commit or push after any command but cd in the same call (the scan reads the repo
-// before the call runs), a push or commit where git cannot answer, and a call with a quote left open. Before
+// stdin is not scanned), a git commit or push after any command but cd in the same call, a substitution's command
+// included (the scan reads the repo before the call runs), a push or commit where git cannot answer, and a call
+// with a quote or substitution left open. Before
 // every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file and the raw
 // command. It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
 //
@@ -863,7 +1004,8 @@ function refuse(what, why) {
 }
 
 // The tools let through, by what the guard checks: read (nothing), write (the path), bash (the parse), skill
-// (frames only), free (nothing to check). Every other tool is refused.
+// (frames only), look (the browser's computer tool: screenshot and zoom only), free (nothing to check). Every
+// other tool is refused, the browser's clicks, typing, form input, page scripts and preview_start included.
 const SAFE = {
   Read: 'read', Grep: 'read', Glob: 'read',
   Edit: 'write', MultiEdit: 'write', Write: 'write', NotebookEdit: 'write',
@@ -871,13 +1013,18 @@ const SAFE = {
   Skill: 'skill',
   TodoWrite: 'free', AskUserQuestion: 'free', ToolSearch: 'free', WebSearch: 'free', WebFetch: 'free',
   mcp__ccd_turn__update_plan: 'free', mcp__ccd_turn__wrap_up: 'free',
+  mcp__Claude_Browser__navigate: 'read', mcp__Claude_Browser__read_page: 'read',
+  mcp__Claude_Browser__get_page_text: 'read', mcp__Claude_Browser__find: 'read',
+  mcp__Claude_Browser__resize_window: 'read', mcp__Claude_Browser__tabs_context: 'read',
+  mcp__Claude_Browser__computer: 'look',
 };
+const LOOKS = new Set(['screenshot', 'zoom']);
 
-// A path as the shell meant it: ~, $HOME and ${HOME} expanded, Git Bash's /c/... read as C:/... on Windows, made
-// absolute.
+// A path as the shell meant it: ~, $HOME and ${HOME} expanded, Git Bash's /c/... read as C:/... on Windows (and
+// /c alone as C:/, not the current folder on C:), made absolute.
 function toPath(p, cwd) {
   let s = String(p).replace(/^(~|\$HOME|\$\{HOME\})(?=$|[\\/])/, () => HOME);
-  if (WIN) s = s.replace(/^\/([a-zA-Z])(?=\/|$)/, '$1:');
+  if (WIN) s = s.replace(/^\/([a-zA-Z])(?:\/|$)/, '$1:/');
   return resolve(cwd, s);
 }
 // The same, in one spelling for comparison: forward slashes, lower case on Windows.
@@ -958,32 +1105,53 @@ function skipBody(cmd, i, h) {
 // A shell command split into simple commands (on newlines, ;, &, |, parentheses) of tokens, quotes removed;
 // redirections are Redir tokens, a descriptor number before one dropped. A # that starts a word begins a comment;
 // a heredoc body is skipped to its delimiter line; a backslash before a newline joins the lines. Inside double
-// quotes a backslash escapes only what bash lets it escape. A quote left open refuses.
+// quotes a backslash escapes only what bash lets it escape. The commands inside $(...), backticks, <(...) and
+// >(...), quoted or not, are parsed as commands of their own, marked sub, and listed before the command that
+// holds them, since bash runs them first; their text stays in the word. $((...)) parses the same way, so a << in
+// it reaches no further than its closing parentheses. A quote or substitution left open refuses.
 function segments(cmd) {
   const segs = [];
-  let toks = [], cur = '', has = false, q = null, wantDelim = null;
+  parse(cmd, 0, null, segs);
+  return segs;
+}
+// Parse from i to the closer (null for the whole command, ')' or a backtick for a substitution); return the
+// closer's index, or the command's length if there is none.
+function parse(cmd, i, closer, segs) {
+  let toks = [], cur = '', has = false, quoted = false, q = null, wantDelim = null, depth = 0;
   const here = [];
   const endTok = () => {
     if (has) {
-      if (wantDelim) { wantDelim.delim = cur; here.push(wantDelim); wantDelim = null; }
+      if (wantDelim) { wantDelim.delim = cur; wantDelim.quoted = quoted; here.push(wantDelim); wantDelim = null; }
       toks.push(cur);
     }
     cur = '';
     has = false;
+    quoted = false;
   };
-  const endSeg = () => { endTok(); if (toks.length) segs.push(toks); toks = []; };
-  for (let i = 0; i < cmd.length; i++) {
+  const endSeg = () => { endTok(); if (toks.length) segs.push(Object.assign(toks, { sub: closer !== null })); toks = []; };
+  // A substitution starting at j: its commands parsed, its text added to the word; returns its end.
+  const subst = (j) => {
+    const end = cmd[j] === '`' ? parse(cmd, j + 1, '`', segs) : parse(cmd, j + 2, ')', segs);
+    if (end >= cmd.length) refuse('a command with a substitution left open', 'the guard cannot tell where it ends');
+    cur += cmd.slice(j, end + 1);
+    has = true;
+    return end;
+  };
+  for (; i < cmd.length; i++) {
     const c = cmd[i];
     if (q) {
       if (c === q) q = null;
       else if (c === '\\' && q === '"' && cmd[i + 1] === '\n') i++;
       else if (c === '\\' && q === '"' && i + 1 < cmd.length && '$`"\\'.includes(cmd[i + 1])) cur += cmd[++i];
+      else if (q === '"' && (cmd.startsWith('$(', i) || c === '`')) i = subst(i);
       else cur += c;
       continue;
     }
-    if (c === "'" || c === '"') { q = c; has = true; continue; }
+    if (c === "'" || c === '"') { q = c; has = true; quoted = true; continue; }
     if (c === '\\' && cmd[i + 1] === '\n') { i++; continue; }
-    if (c === '\\' && i + 1 < cmd.length) { cur += cmd[++i]; has = true; continue; }
+    if (c === '\\' && i + 1 < cmd.length) { cur += cmd[++i]; has = true; quoted = true; continue; }
+    if (c === '`' && closer === '`') { endSeg(); return i; }
+    if (cmd.startsWith('$(', i) || c === '`' || /^[<>]\(/.test(cmd.slice(i, i + 2))) { i = subst(i); continue; }
     if (c === '#' && !has) { while (i + 1 < cmd.length && cmd[i + 1] !== '\n') i++; continue; }
     if (c === '\n') {
       endSeg();
@@ -995,11 +1163,15 @@ function segments(cmd) {
     const op = /^(&>>|&>|>>|>\||>&|>|<<<|<<-|<<|<&|<>|<)/.exec(cmd.slice(i, i + 3));
     if (op) {
       if (has && /^[0-9]+$/.test(cur)) { cur = ''; has = false; } else endTok();
-      toks.push(new Redir(op[1]));
-      if (op[1] === '<<' || op[1] === '<<-') wantDelim = { strip: op[1] === '<<-' };
+      const r = new Redir(op[1]);
+      toks.push(r);
+      if (op[1] === '<<' || op[1] === '<<-') wantDelim = r.h = { strip: op[1] === '<<-' };
       i += op[1].length - 1;
       continue;
     }
+    if (c === ')' && closer === ')' && depth === 0) { endSeg(); return i; }
+    if (c === '(') depth++;
+    if (c === ')' && depth > 0) depth--;
     if (';&|()'.includes(c)) { endSeg(); continue; }
     if (/\s/.test(c)) { endTok(); continue; }
     cur += c;
@@ -1007,8 +1179,11 @@ function segments(cmd) {
   }
   if (q) refuse('a command with a quote left open', 'the guard cannot tell where it ends; for a long commit message, write it to a file and use -F');
   endSeg();
-  return segs;
+  return cmd.length;
 }
+// A substitution that only reads a heredoc with a quoted delimiter, as in "$(cat <<'EOF' ... EOF)": it runs
+// nothing and expands nothing, so it may come before a commit.
+const readsHeredoc = (toks) => toks.sub && toks.length === 3 && toks[0] === 'cat' && isRedir(toks[1]) && toks[1].h?.quoted === true;
 // Reserved words that run the command after them.
 const PREFIX = new Set(['{', 'if', 'then', 'elif', 'else', 'do', 'while', 'until', '!']);
 // Wrappers that run the command after them, with their options that take a value.
@@ -1035,9 +1210,9 @@ function words(toks) {
   }
 }
 
-// Paths the command writes, and paths it removes (rm's arguments, mv's sources).
+// Paths the command writes, paths it removes (rm's arguments, mv's sources), and folders a recursive cp fills.
 function targets(toks) {
-  const writes = [], removes = [];
+  const writes = [], removes = [], fills = [];
   toks.forEach((t, i) => {
     const to = toks[i + 1];
     if (isRedir(t) && WRITE_OPS.has(t.op) && typeof to === 'string' && !(t.op === '>&' && /^([0-9]+|-)$/.test(to))) {
@@ -1059,14 +1234,19 @@ function targets(toks) {
       else if (!a.startsWith('-')) srcs.push(a);
     }
     if (dest == null) dest = srcs.pop();
-    if (dest != null) writes.push(dest, ...srcs.map((s) => `${dest.replace(/[\\/]+$/, '')}/${basename(s)}`));
+    const landed = dest == null ? [] : srcs.map((s) => `${dest.replace(/[\\/]+$/, '')}/${basename(s)}`);
+    if (dest != null) writes.push(dest, ...landed);
+    // cp -r, -R or -a copies each source folder whole, so what lands may hold protected config.
+    if (cmd === 'cp' && args.some((a) => a === '--recursive' || a === '--archive' || (/^-[a-zA-Z]*[rRa]/.test(a) && !a.startsWith('-t')))) {
+      fills.push(...landed);
+    }
     if (cmd === 'mv') removes.push(...srcs);
   }
   if (cmd === 'rm') removes.push(...plain);
   if (cmd === 'sed' && args.some((a) => /^-i/.test(a) || a.startsWith('--in-place')) && plain.length) {
     writes.push(plain[plain.length - 1]);
   }
-  return { writes, removes };
+  return { writes, removes, fills };
 }
 
 function gitArgs(w) {
@@ -1149,8 +1329,8 @@ function checkCommit(rest, repo, command) {
     const a = rest[i];
     if (a === '--message') msgs.push(rest[++i] ?? '');
     else if (a.startsWith('--message=')) msgs.push(a.slice(10));
-    else if (a === '--file') file = rest[++i] ?? '';
-    else if (a.startsWith('--file=')) file = a.slice(7);
+    else if (/^--file?$/.test(a)) file = rest[++i] ?? ''; // git takes --fil for --file
+    else if (/^--file?=/.test(a)) file = a.slice(a.indexOf('=') + 1);
     else if (/^-[a-zA-Z]/.test(a)) {
       // A cluster of short options: m or F takes the rest of the cluster, or the next word.
       const k = a.search(/[mF]/);
@@ -1164,7 +1344,8 @@ function checkCommit(rest, repo, command) {
     const p = toPath(file, repo); // git -C runs git in that folder, so -F is relative to it
     try { msgs.push(readFileSync(p, 'utf8')); } catch { refuse(`git commit -F ${file}`, `no message file at ${p} to scan`); }
   }
-  // The raw command too: a heredoc message the parse could not follow is still scanned.
+  // The raw command too: a message the parse does not read, such as one after git's abbreviation --mess, is still
+  // scanned.
   msgs.push(command.replace(homeRe, '~'));
   const tmp = mkdtempSync(join(tmpdir(), 'perturb-msg-'));
   let r;
@@ -1185,12 +1366,16 @@ function bash(command, cwd) {
   const rules = protectedRules(cwd);
   let other = false;
   for (const toks of segments(command)) {
-    const { writes, removes } = targets(toks);
+    if (readsHeredoc(toks)) continue;
+    const { writes, removes, fills } = targets(toks);
     for (const t of writes) {
       if (hasGlob(t) ? globHits(t, cwd, rules) : isProtected(t, cwd, rules)) refuse(`a write to ${t}`, 'it is protected config under /perturb');
     }
     for (const t of removes) {
       if (hasGlob(t) ? globHits(t, cwd, rules) : holdsProtected(t, cwd, rules)) refuse(`removing ${t}`, 'it is or holds protected config under /perturb');
+    }
+    for (const t of fills) {
+      if (hasGlob(t) ? globHits(t, cwd, rules) : holdsProtected(t, cwd, rules)) refuse(`a recursive copy to ${t}`, 'it is or holds protected config under /perturb');
     }
     const [cmd, ...rest] = words(toks);
     if (cmd === 'cd') { if (rest[0]) cwd = toPath(rest[0], cwd); continue; }
@@ -1202,7 +1387,7 @@ function bash(command, cwd) {
       const { sub, rest: args, dir } = gitArgs(rest);
       const repo = dir ? toPath(dir, cwd) : cwd;
       if (sub === 'push' || sub === 'commit') {
-        if (other) refuse(`git ${sub} after another command`, `the checks read the repo before the call runs; stage in one call, then run git ${sub} in the next, alone or after cd`);
+        if (other) refuse(`git ${sub} after another command`, `the checks read the repo before the call runs; stage in one call, then run git ${sub} in the next, alone or after cd, with no substitution but $(cat <<'EOF' ...) for a message`);
         if (!git(repo, 'rev-parse', '--git-dir')) refuse(`git ${sub} in ${repo}`, 'git cannot answer there, so the guard cannot check it');
       }
       if (sub === 'push') checkPush(args, repo);
@@ -1225,6 +1410,7 @@ function main() {
     if (kind === 'write' && typeof p !== 'string') throw new Error(`${tool} without a path`);
     if (typeof p === 'string' && isProtected(p, cwd, protectedRules(cwd))) refuse(`${tool} of ${p}`, 'it is protected config under /perturb');
   }
+  if (kind === 'look' && !LOOKS.has(ti.action)) refuse(`${tool} ${ti.action}`, 'only screenshot and zoom are read-only; clicks, typing and keys could submit a form');
   if (kind === 'skill' && ti.skill !== 'frames') refuse(`the skill ${ti.skill}`, 'only frames runs under /perturb, since another skill could start work the guard cannot see');
   if (kind === 'bash') {
     if (typeof ti.command !== 'string') throw new Error('Bash without a command');
@@ -1243,42 +1429,48 @@ try {
 }
 ```
 
-- [ ] Run it; expected: `ℹ pass 21`, `ℹ fail 0` (on Linux and macOS the
-  Windows-spellings test is skipped: `ℹ pass 20`, `ℹ skipped 1`). The
-  scratch runs took 59 s alone and 107 s beside other work on Windows,
+- [ ] Run it; expected: `ℹ pass 23`, `ℹ fail 0` (on Linux and macOS the
+  Windows-spellings test is skipped: `ℹ pass 22`, `ℹ skipped 1`). On
+  Windows the runs have taken 59 s to 107 s, by load (fold 3's: 80 s and 94 s),
   most of it the commit tests' scans.
-- [ ] Mutant runs, one at a time against the full T2 suite, restored after
-  each (all 71 were killed in the scratch run, by the tests named; "alone"
-  marks a test that was the only one to kill it). Every test is the only
-  killer of at least one.
-  - Pass 1's and revision 2's, on the new code: (a) drop `f === '-f' ||`
-    from the force check: "force push" alone; (b) the double-quote
-    backslash rule unescapes every character: "Bash writes", "commit", "git
-    -C and cd" and "push or commit where git cannot answer" (Windows paths
-    in double quotes); (c) delete `'scan-patterns.local'` from the protected
-    list: "Edit and Write" alone; (d) delete the `cd` line in `bash`: "git
-    -C and cd", "commit or push after another command" and "git cannot
-    answer"; (e) the catch's `process.exit(2)` to `process.exit(1)`: every
-    test; (f) no prefix stripping in `words`: "prefixes" alone;
-    (g) `defaultBranch` always returns `'main'`: six push and prefix tests;
-    (h) `-C` never sets `dir`: "git -C and cd", "commit" and "git cannot
-    answer"; (i) drop `--all`: "--all, --mirror and glob" alone; (j)
-    `r.status !== 0` to `r.status === 1`: "any nonzero scan exit" alone;
-    (k) resolve `-F` against the hook's own cwd, not the `git -C` folder:
-    "commit" alone; (l) drop the glob refspec refusal: "--all, --mirror and
-    glob" alone; (m) drop `|| dst === '@'`: "push with no refspec, HEAD or
-    @" alone; (n) removals checked with `isProtected`: "Bash writes" and
-    "comments and heredoc bodies"; (o) delete the `mv` sources line, (q)
-    drop `$HOME` and `${HOME}` from `toPath`, (u) drop `--in-place`: "Bash
-    writes" alone; (p) delete the `rm` line: "Bash writes" and "comments";
-    (r) parentheses not separators: "prefixes" alone; (s) `PowerShell` on
-    the safe list: "only the safe tools" alone; (t) drop the `-F -`
-    refusal: "a message from stdin" alone; (v) delete the `/c/` line in
-    `toPath`: "Windows spellings" alone (Windows only); (w) `r.path + '/'`
-    to `r.path` in `isProtected`, (x) the checkout list without
-    `settings.local.json`: "Edit and Write" alone; (y) `-c` skips one word:
-    "git -C and cd" alone; (z) a glued short-option value ignored:
-    "commit" and "a message from stdin".
+- [ ] Mutant runs, one at a time against the full T2 suite ((bt) against
+  T3's suite too, since that suite reads the guard), restored after each
+  (fold 3's scratch run: 106 of 107 killed, by the tests named; (au)
+  survived the first run and was killed once the `--mess` line was added;
+  the one survivor is equivalent; "alone" marks a test that was the only one
+  to kill it). Every test, "substitutions" (the `$((...))` test) and
+  "browser" included, is the only killer of at least one. Short names:
+  "commit" is "commit: scan clean allowed, scan hit refused", and
+  "substitutions" is "$((...)) starts no heredoc; the commands inside a
+  substitution, quoted or not, are parsed".
+  - Pass 1's and revision 2's: (a) drop `f === '-f' ||` from the force
+    check: "force push" alone; (b) the double-quote backslash rule
+    unescapes every character: "Bash writes", "Windows spellings",
+    "commit or push after another command", "commit" and "git -C and cd"
+    (Windows paths in double quotes); (c) delete `'scan-patterns.local'`
+    from the protected list: "Edit and Write" alone; (d) delete the `cd`
+    line in `bash`: "Windows spellings", "commit or push after another
+    command", "git -C and cd" and "git cannot answer"; (e) the catch's
+    `process.exit(2)` to `process.exit(1)`: every test; (f) no prefix stripping in `words`: "prefixes"
+    alone; (g) `defaultBranch` always returns `'main'`: six push, prefix
+    and comment tests; (h) `-C` never sets `dir`: "commit", "git -C and cd"
+    and "git cannot answer"; (i) drop `--all`: "--all, --mirror and glob"
+    alone; (j) `r.status !== 0` to `r.status === 1`: "any nonzero scan
+    exit" alone; (k) resolve `-F` against the hook's own cwd, not the
+    `git -C` folder: "commit" alone; (l) drop the glob refspec refusal:
+    "--all, --mirror and glob" alone; (m) drop `|| dst === '@'`: "push with
+    no refspec, HEAD or @" alone; (n) removals checked with `isProtected`,
+    (p) delete the `rm` line: "Bash writes", "Windows spellings",
+    "comments and heredoc bodies" and "substitutions"; (o) delete the `mv`
+    sources line, (q) drop `$HOME` and `${HOME}` from `toPath`, (u) drop
+    `--in-place`: "Bash writes" alone; (r) parentheses not separators:
+    "prefixes" alone; (s) `PowerShell` on the safe list: "only the safe
+    tools" alone; (t) drop the `-F -` refusal: "a message from stdin"
+    alone; (v) delete the `/c/` line in `toPath`: "Windows spellings"
+    alone (Windows only); (w) `r.path + '/'` to `r.path` in `isProtected`,
+    (x) the checkout list without `settings.local.json`: "Edit and Write"
+    alone; (y) `-c` skips one word: "git -C and cd" alone; (z) a glued
+    short-option value ignored: "commit" and "a message from stdin".
   - Fold 2's: (aa) the descriptor digit kept as a word, (ab) a value-taking
     push option keeps its value as a refspec, (ac) an unknown long push
     option allowed, (ad) an unknown short push option allowed: "push:
@@ -1286,32 +1478,72 @@ try {
     answer: "git cannot answer" alone; (af) `timeout` not a wrapper, (ag)
     its duration kept, (ah) `exec` not a wrapper, (ai) wrapper options that
     take a value not skipped, (ao) no line continuation: "prefixes" alone;
-    (aj) comments not skipped, (ak) any `#` starts a comment, (al) heredoc
-    bodies not skipped, (am) `<<-` tabs not stripped, (an) a quote left
-    open allowed, (ap) newline not a separator: "comments and heredoc
-    bodies" alone; (aq) `gh -R` not skipped, (ar) any `gh <x> merge`
-    refused: "gh pr merge" alone; (as) only the first `-m` scanned, (at) a
-    cluster read only at its first letter, (au) the raw command not
-    scanned, (av) the home folder not read as `~`, (aw) the temporary
-    folder not removed, (ax) a missing `-F` file allowed: "commit" alone;
-    (ay) a commit after another command allowed: "commit or push after
-    another command" alone; (az) `/dev/stdin` not refused: "a message from
-    stdin" alone (on Windows the path does not exist; on Linux and macOS,
-    unrun, the hook's spent stdin would read empty and the commit pass,
-    which the same check also catches);
-    (ba) the scan timeout not reported: "a scan that does not finish in
-    time" alone; (bb) MultiEdit checked as a read, (bc) only the main
-    checkout's settings: "Edit and Write" alone; (bd) cp with no source
-    base name, (be) `cp -t` not read, (bf) globs read literally, (bg) a
-    glob matching a leading dot, (bh) the root not a parent of all, (bi)
-    `>&` not a write, (bj) `&>` not a write: "Bash writes" alone; (bk)
+    (ak) any `#` starts a comment, (am) `<<-` tabs not stripped, (an) a
+    quote left open allowed: "comments and heredoc bodies" alone; (aj)
+    comments not skipped: "comments and heredoc bodies" and
+    "substitutions"; (al) heredoc bodies not skipped, (ap) newline not a
+    separator: "comments and heredoc bodies", "substitutions" and
+    "commit"; (aq) `gh -R` not skipped, (ar) any `gh <x> merge` refused:
+    "gh pr merge" alone; (as) only the first `-m` scanned, (at) a cluster
+    read only at its first letter, (au) the raw command not scanned (the
+    `--mess` line), (aw) the temporary folder not removed, (ax) a missing
+    `-F` file allowed: "commit" alone; (av) the home folder not read as
+    `~`: "commit" and "Windows spellings"; (ay) a commit after another
+    command allowed: "commit or push after another command" alone; (az)
+    `/dev/stdin` not refused: "a message from stdin" alone (on Windows the
+    path does not exist; on Linux and macOS, unrun, the hook's spent stdin
+    would read empty and the commit pass, which the same check also
+    catches); (ba) the scan timeout not reported: "a scan that does not
+    finish in time" alone; (bb) MultiEdit checked as a read, (bc) only the
+    main checkout's settings: "Edit and Write" alone; (bd) cp with no
+    source base name, (be) `cp -t` not read, (bf) globs read literally,
+    (bg) a glob matching a leading dot, (bh) the root not a parent of all,
+    (bi) `>&` not a write, (bj) `&>` not a write: "Bash writes" alone; (bk)
     Monitor on the safe list, (bl) any skill runs, (bm) Read checked as a
     write: "only the safe tools" alone; (bn) the tool name's type
     unchecked, (bo) a null `tool_input` passes, (bp) a string `tool_input`
     passes: "fails closed" alone; (bq) a deletion under `showcase` without
     the slash allowed: "remote branch deletion" alone; (br) single quotes
-    not quotes: "push: feature branch" and "comments"; (bs) an unquoted
-    backslash kept: "push: feature branch" alone.
+    not quotes: "push: feature branch", "comments", "substitutions" and
+    "commit"; (bs) an unquoted backslash kept: "push: feature branch"
+    alone.
+  - Pass 3's own, each killed in fold 3's run, the twelve it saw survive
+    first: (bt) the scan timeout 40 s, over the hook's 30: T3's "the scan
+    timeout is under the hook timeout" alone (the guard suite cannot see
+    it); (bu) the heredoc list not cleared after a body, (bv) a delimiter
+    matched by its prefix, (bw) the `<<-` strip on every heredoc: "comments
+    and heredoc bodies" alone; (bx) a push `-o` mid-cluster always taking
+    the next word: "push: redirections and option values" alone; (by) the
+    raw command's home folder without its `/c/` form, (bz) matched case
+    sensitively: "Windows spellings" alone (Windows only); (ca) a glued
+    `-t` ignored, (cb) the glob root's parent dropped: "Bash writes" alone;
+    (cc) `env -C` not a valued option: "prefixes" alone; (cd) a backslash
+    and newline kept inside double quotes: "push: feature branch" alone;
+    (ce) `force-with-lease=` unknown to `PUSH_EQ`: survives, and is
+    equivalent (the unknown option is refused anyway). The rest of pass 3's
+    were killed as it found: (cf) redirect targets kept as words: "push:
+    redirections and option values" alone; (cg) `cd` counted as another
+    command: "commit or push after another command", "git -C and cd" and
+    "git cannot answer"; (ch) only git counted as another command: "commit
+    or push after another command" alone; (ci) the glob's parent check
+    dropped, (cj) `tee` not a write, (ck) sed's last file not checked:
+    "Bash writes" alone; (cl) a comment eating its newline: "comments and
+    heredoc bodies" alone; (cm) `--file=` ignored: "commit" and "a message
+    from stdin".
+  - Fold 3's, on the new code: (cn) a recursive cp not checked, (co) `-a`
+    not read as recursive: "Bash writes" alone; (cp) `/c` alone read as
+    `c:` again: "Windows spellings" alone (Windows only); (cq) an unquoted
+    `$(` not a substitution, (cr) unquoted backticks not one:
+    "substitutions" and "commit or push after another command"; (cs)
+    quoted substitutions not parsed: those two and "commit"; (ct) a heredoc
+    read with an unquoted delimiter may lead a commit, (cu) `<(` and `>(`
+    not substitutions: "commit or push after another command" alone; (cv)
+    no heredoc read may lead: "commit" alone; (cw) a substitution left open
+    allowed, (cx) a subshell's `)` closing the substitution around it:
+    "substitutions" alone; (cy) `--fil` not read as `--file`: "commit"
+    alone; (cz) `--fil=` not read as `--file=`: "commit" and "a message
+    from stdin"; (da) the browser's `computer` tool taking any action, (db)
+    zoom refused, (dc) `javascript_tool` on the safe list: "browser" alone.
 - [ ] Commit: `Scripts: perturb-guard, the /perturb PreToolUse hook`, body:
   the tripwire-not-sandbox limit, why it is an allow-list, and why a commit
   or push must lead its call.
@@ -1328,7 +1560,7 @@ MCP tools included; see Global constraints), the hook command
 `command -v node >/dev/null || { echo 'perturb-guard: node not found, refusing' >&2; exit 2; }; node ~/.claude/scripts/perturb-guard.mjs || exit 2`,
 and `timeout: 30` (seconds; the value is a Choice for the owner's review:
 above the scan's 20 s and the 6.7 to 7.1 s pass 2 measured for a 3000-file
-scan under load).
+scan under load; the test checks the guard's scan timeout stays under it).
 **Verify:** `bash scripts/perturb-hook.test.sh`
 
 - [ ] Write the failing test `scripts/perturb-hook.test.sh`:
@@ -1338,8 +1570,9 @@ scan under load).
 #
 # perturb-hook.test.sh: check skills/perturb/SKILL.md's frontmatter and run its hook command exactly as written,
 # with a throwaway HOME holding the scripts where setup installs them: the hooks block is the one below, word for
-# word (every tool reaches the guard); the skill is user-only; node hidden from PATH refuses (exit 2); the guard
-# script missing refuses; an allowed call passes. Exit 0 = every check passed.
+# word (every tool reaches the guard); the guard's scan timeout is under the hook's; the skill is user-only; node
+# hidden from PATH refuses (exit 2); the guard script missing refuses; an allowed call passes. Exit 0 = every check
+# passed.
 #
 # Usage: bash scripts/perturb-hook.test.sh
 
@@ -1374,6 +1607,11 @@ block=$(awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { exit } 
 check "the frontmatter hooks block, word for word" [ "$block" = "$EXPECTED" ]
 check "user-only: disable-model-invocation: true" grep -qx 'disable-model-invocation: true' "$SKILL"
 cmd=$(printf '%s\n' "$block" | sed -n 's/^ *command: "\(.*\)"$/\1/p' | sed 's/\\"/"/g')
+# The guard's scan timeout (ms) under the hook's (s), so a slow scan is refused by the guard, not cut off.
+hook_s=$(printf '%s\n' "$block" | sed -n 's/^ *timeout: \([0-9][0-9]*\)$/\1/p')
+scan_ms=$(sed -n 's/.*PERTURB_SCAN_TIMEOUT_MS) || \([0-9][0-9]*\);$/\1/p' "$HERE/perturb-guard.mjs")
+under() { [ -n "$1" ] && [ -n "$2" ] && [ "$2" -lt $(($1 * 1000)) ]; } # <hook s> <scan ms>
+check "the scan timeout is under the hook timeout" under "$hook_s" "$scan_ms"
 
 # PATH with every folder that holds node left out; empty when that also leaves out bash.
 path_without_node() {
@@ -1417,11 +1655,12 @@ echo "perturb-hook.test.sh: all passed, $skipped skipped"
 ```text
 FAIL  the frontmatter hooks block, word for word
 FAIL  user-only: disable-model-invocation: true
+FAIL  the scan timeout is under the hook timeout
 FAIL  node missing: exit 2
 FAIL  node missing: says so
 ok    an allowed call: exit 0
 FAIL  guard script missing: exit 2
-perturb-hook.test.sh: 5 FAILED, 0 skipped
+perturb-hook.test.sh: 6 FAILED, 0 skipped
 ```
 
   Copy the FAIL lines from your run.
@@ -1452,16 +1691,17 @@ the result is a showcase branch the owner mines, never merges whole, so a
 large diff is welcome. The guard in this skill's frontmatter sees every
 tool call from now to the end of the session. It lets through only Read,
 Grep, Glob, Bash, Edit, MultiEdit, Write, NotebookEdit, the frames skill,
-and tools that ask the owner, plan, or search; it refuses every other tool,
-Agent, Workflow, PowerShell, MCP tools and session starters included. Of
-those, it refuses writes to or removal of the owner's protected config;
-pushes to the default branch, force pushes, `gh pr merge`, and deleting
-remote branches outside `showcase/`; `git commit -F -`; and a `git commit`
-or `git push` that follows any command but `cd` in the same Bash call. It
-scans every other commit for private values. A refusal is not an obstacle
-to route around: say what was refused and why you wanted it, and the owner
-runs it if they approve. The guard is a tripwire, not a sandbox; never
-write a script to do what it refuses.
+the browser's read-only tools, and tools that ask the owner, plan, or
+search; it refuses every other tool, Agent, Workflow, PowerShell, MCP
+tools and session starters included. Of those, it refuses writes to or
+removal of the owner's protected config; pushes to the default branch,
+force pushes, `gh pr merge`, and deleting remote branches outside
+`showcase/`; `git commit -F -`; and a `git commit` or `git push` that
+follows any command but `cd` in the same Bash call. It scans every other
+commit for private values. A refusal is not an obstacle to route around:
+say what was refused and why you wanted it, and the owner runs it if they
+approve. The guard is a tripwire, not a sandbox; never write a script to
+do what it refuses.
 
 Leaving `/perturb` means starting a new session; the default there is the
 owner's full charter.
@@ -1499,7 +1739,15 @@ registered. Before any write, push or commit, stop and ask the owner to run
   `git commit` in the next, alone or after `cd`; push in a third. The scan
   reads the repo before a call runs, so a commit after other commands in
   the same call would go out unscanned. Messages go by `-m` or `-F <file>`;
-  both, and the command itself, are scanned.
+  both, and the command itself, are scanned. For a message from a heredoc,
+  use `-m "$(cat <<'EOF' ... EOF)"` with the delimiter quoted; no other
+  substitution may appear in a commit or push call.
+- Check anything a student would see the way they see it: serve it from a
+  Bash call run in the background (or open the file), then in the browser
+  navigate to it, resize to the mobile preset, take a screenshot and read
+  the page; resize back to desktop after. Clicks, typing, form input, page
+  scripts and `preview_start` are refused: say what to click, and the owner
+  tries it.
 - Draw on the `frames` skill for directions the owner's framing hides.
 - Open no pull request: the branch is pushed, never merged. Mining happens
   in a fresh session, under the full charter.
@@ -1528,7 +1776,7 @@ with the `/handoff` step 4 block. The report has, in order:
   `1 skipped` where no PATH leaves out node and keeps bash, which the run
   must report).
 - [ ] Mutant runs, one at a time against the full T3 suite, restored after
-  each (all 9 were killed in the scratch run, by the checks named):
+  each (all 9 were killed in fold 3's scratch run, by the checks named):
   (a) in the frontmatter command, the node-missing `exit 2` to `exit 1`:
   "the frontmatter hooks block" and "node missing: exit 2" (the second is
   skipped where no PATH leaves out node, which the run must report);
@@ -1536,14 +1784,19 @@ with the `/handoff` step 4 block. The report has, in order:
   and "an allowed call: exit 0"; (c) delete the trailing `|| exit 2`: the
   block and "guard script missing: exit 2"; (d) matcher `".*"` to
   `"Bash"`, (e) `PreToolUse` to `PostToolUse`, (f) delete `shell: bash`,
-  (g) delete `timeout: 30`, (i) `type: command` to `type: prompt`: the
-  block alone; (h) `disable-model-invocation: true` to `false`: "user-only"
+  (i) `type: command` to `type: prompt`: the block alone; (g) delete
+  `timeout: 30`: the block and "the scan timeout is under the hook
+  timeout"; (h) `disable-model-invocation: true` to `false`: "user-only"
   alone. The behavior checks are not sole killers of any frontmatter
   mutant, since the block is compared word for word; they stay because the
   spec names them (the wrapper refuses with node hidden, the hook command
   with the guard missing exits 2) and they prove the command runs as
   written. Pass 2's "unreadable input" check is dropped: it killed no
-  mutant, and the guard suite covers malformed input.
+  mutant, and the guard suite covers malformed input. "The scan timeout is
+  under the hook timeout" reads the guard too: it alone kills T2's mutant
+  (bt), the guard's 20 s raised to 40 s. Two prose mutants survive and are
+  left so: the SKILL body without its re-invoke paragraph, and another
+  skill name in the frontmatter (the block check starts at `hooks:`).
 - [ ] Commit: `Skills: /perturb, latitude behind a hook`, body: why the hook
   lives in the frontmatter and sees every tool, why it ends `|| exit 2`,
   and why leaving means a new session.
@@ -1660,19 +1913,27 @@ local and pushed is listed once, by its local name).
   form.
 
 ```bash
-# Showcase branches: a local one past 14 days is listed with its age, once though it is also pushed, as is a pushed
-# one no local branch holds; one inside 14 days is not, nor is an old branch outside showcase/, local or pushed.
+# Showcase branches: with only one inside 14 days, no header; a local one past 14 days is listed with its age, once
+# though it is also pushed, as is a pushed one no local branch holds; one inside 14 days is not, nor is an old branch
+# outside showcase/, local or pushed.
 git_q init -q --bare "$T/show-origin.git"
 git_q init -q "$T/show" && (
   cd "$T/show" || exit 1
   git symbolic-ref HEAD refs/heads/main
   git_q commit --allow-empty -m first
   git_q remote add origin "$T/show-origin.git"
-  old=$(( $(date +%s) - 20 * 86400 )) new=$(( $(date +%s) - 5 * 86400 ))
-  git_q checkout -b showcase/2026-01-01-old &&
-    GIT_COMMITTER_DATE="@$old" git_q commit --allow-empty -m old && git_q push origin showcase/2026-01-01-old
+  new=$(( $(date +%s) - 5 * 86400 ))
   git_q checkout -b showcase/2026-01-02-new main &&
     GIT_COMMITTER_DATE="@$new" git_q commit --allow-empty -m new
+  git_q checkout main
+)
+run "$T/show-new.txt" --no-fetch "$T/show"
+check "showcase inside 14 days only: no header" lacks "$T/show-new.txt" "showcase branches older than"
+(
+  cd "$T/show" || exit 1
+  old=$(( $(date +%s) - 20 * 86400 ))
+  git_q checkout -b showcase/2026-01-01-old main &&
+    GIT_COMMITTER_DATE="@$old" git_q commit --allow-empty -m old && git_q push origin showcase/2026-01-01-old
   git_q checkout -b showcase/2026-01-03-pushed main &&
     GIT_COMMITTER_DATE="@$old" git_q commit --allow-empty -m pushed
   git_q push origin showcase/2026-01-03-pushed
@@ -1690,11 +1951,12 @@ check "showcase inside 14 days: not listed" lacks "$T/show.txt" "    showcase/20
 check "old branch outside showcase/: not listed" lacks "$T/show.txt" "old-feature: 20 days old"
 ```
 
-- [ ] Run it; expected failure: the four listing checks FAIL; the two
-  "not listed" checks pass (nothing prints them yet). The scratch run
-  printed:
+- [ ] Run it; expected failure: the four listing checks FAIL; the
+  "no header" and two "not listed" checks pass (nothing prints them
+  yet). The scratch run printed:
 
 ```text
+ok    showcase inside 14 days only: no header
 FAIL  showcase past 14 days: listed under its header
 FAIL  showcase past 14 days: its age
 FAIL  showcase past 14 days, local and pushed: listed once
@@ -1736,17 +1998,23 @@ ok    old branch outside showcase/: not listed
   answered; M counts `Ruling (Claude)` entries logged."
 - [ ] Run it; expected: the suite ends `all checks passed, N skipped`.
 - [ ] Mutant runs, one at a time against the full suite, restored after
-  each (all 7 were killed in the scratch run, by the checks named):
+  each (all 8 were killed in fold 3's scratch run, by the checks named):
   (a) `SHOWCASE_DAYS=14` to `SHOWCASE_DAYS=25`: the four "showcase past
   14 days" checks; (b) `SHOWCASE_DAYS=14` to `SHOWCASE_DAYS=3`: "showcase
-  inside 14 days: not listed" and the header check; (c) delete
+  inside 14 days: not listed", "no header" and the header check; (h)
+  `if [ -n "$old" ]` to `if true`, the header printed with nothing under
+  it: "showcase inside 14 days only: no header" alone; (c) delete
   `refs/heads/showcase` from the for-each-ref line: "showcase past 14
   days: its age" alone; (d) delete `"refs/remotes/$REMOTE/showcase"`:
   "showcase past 14 days, pushed only: listed" alone; (e) `refs/heads` in
   place of `refs/heads/showcase`, (f) `refs/remotes/$REMOTE` in place of
   `refs/remotes/$REMOTE/showcase`: "old branch outside showcase/: not
   listed" alone; (g) delete the awk line that skips a pushed copy: "listed
-  once" alone.
+  once" alone. Pass 3's other eight were run too: seven killed (an inverted
+  age test, age in hours, every local or every remote ref, the header
+  dropped, author date, full ref names), and one survives as equivalent
+  on these fixtures (a local branch also marked seen under its remote
+  name).
 - [ ] Commit: `Ground truth: flag showcase branches past 14 days`, body: the
   placeholder, and the count line's purpose (measure the ruling load).
 
@@ -1916,12 +2184,47 @@ grep -rnE '\b[KRL][0-9]{1,3}[a-z]?\b' $F
    copying them: the installed copies differ from this repo's base (by 19
    and 263 lines in pass 2's count), and T5's anchors each occur once in
    them.
-3. Before step 4, clear the OS login name from tracked files in
+3. Before step 4, take the OS login name out of tracked files in
    `~/.claude`, or `commit-scan.sh` would refuse every commit there under
-   `/perturb`. At this fold's count three tracked files hold it:
-   `scripts/leak-scan.sh` (its own pattern list) and two critique probe
-   scripts under `plans/`; recheck with `git -C ~/.claude grep -l -i` and
-   the login name, since the count moves.
+   `/perturb`. List them first: `git -C ~/.claude grep -l -i "$(id -un)"`;
+   at this fold it lists three, and the count moves.
+   a. `scripts/leak-scan.sh` holds the name as its own pattern, in the rule
+      labelled `login name or home path`, which kymograph's commits run
+      through. Before editing, record its result on kymograph:
+      `bash ~/.claude/scripts/leak-scan.sh ~/kymograph >/tmp/leak-before.txt; echo $?`.
+      Then build the name at run time: add, just above `status=0`,
+
+      ```bash
+      login=$(id -un 2>/dev/null)
+      [ -n "$login" ] || { echo "leak-scan: cannot read the login name (id -un); refusing, since an empty name would match every line" >&2; exit 2; }
+      ```
+
+      and in that rule's single-quoted pattern, replace the literal name
+      that leads it with `"$login"`, closing the quote before it and
+      reopening it after (`"$login"'|...'`, the home-path alternatives
+      after the `|` kept as they are). The
+      refusal matters: with an empty name the pattern starts with `|`, and
+      `grep -E` then matches every line (checked: `grep -c -E '|zz'` counts
+      every line). Confirm, in this order:
+      - `git -C ~/.claude grep -c -i "$(id -un)" -- scripts/leak-scan.sh`
+        prints nothing;
+      - in a throwaway repo (`git init` in a temp folder), a file holding
+        the name (`printf 'path %s\n' "$(id -un)" >t.txt`; untracked is
+        enough, since leak-scan reads untracked files too): `leak-scan.sh`
+        on it exits 1 and prints `== login name or home path` and a
+        `t.txt:1:` line; with the file removed it exits 0;
+      - with an `id` that fails first on `PATH`, it exits 2;
+      - on kymograph, the same exit code and output as recorded before
+        (`diff` against `/tmp/leak-before.txt`).
+      This fold ran each of those on a scratch copy of the current file:
+      exit 1 with the header and the hit line, exit 0 clean, exit 2 with
+      `id` failing, and kymograph's output byte for byte the same (exit 0),
+      before and after. Commit `scripts/leak-scan.sh` alone in `~/.claude`.
+   b. The other two, under `plans/ledger/critiques/pass-2/`, belong to
+      another session's work. Name them to the owner and ask whether to
+      edit, remove or keep them; do not edit them here. Step 4's exit 0
+      waits on that answer, and is reachable once both are out of the
+      `git grep` list above.
 4. Write `~/.claude/scan-patterns.local` from the owner's private values;
    `bash ~/.claude/scripts/commit-scan.sh ~/.claude` exits 0.
 5. Add the charter line from the spec's section 8 to `~/.claude/CLAUDE.md`.
@@ -1930,8 +2233,8 @@ grep -rnE '\b[KRL][0-9]{1,3}[a-z]?\b' $F
    run `/perturb`, then try one call per tool class and expect each refused
    with the guard's reason: a Bash push to the default branch; a Write to
    `~/.claude/settings.json`; an Agent call; one MCP tool (a session
-   starter, if connected); a commit whose message holds a scan-list value.
-   A Read passes. Record the results beside the build report.
+   starter, if connected); a commit whose message holds a scan-list value;
+   a browser `computer` click. A Read and a browser screenshot pass. Record the results beside the build report.
 
 ## Overnight readiness
 
