@@ -87,7 +87,9 @@ remote_github() { # <url>
 
 # Open PRs, one line each: a CI verdict (an empty rollup is "no CI"; green only when a check passed and every other
 # passed, was skipped or was neutral, so STALE or anything unfinished is "running") and the clearing-review
-# verdict (the last `Review: <who> at <sha>` line in the body against the PR head).
+# verdict (the last `Review: <who> at <sha>` line in the body against the PR head). With no such line, a line that
+# says "review:" in any case and any place is a Review line in a form the scripts cannot read: "Review line
+# unreadable", which is no clearance either.
 PR_JQ='
 def verdict: [ .statusCheckRollup[]?
                | if (.status // "COMPLETED") != "COMPLETED" then "PENDING" else (.conclusion // .state // "PENDING") end ]
@@ -97,8 +99,9 @@ def verdict: [ .statusCheckRollup[]?
     elif all(.[]; IN("SUCCESS","NEUTRAL","SKIPPED")) then "CI green"
     else "CI running" end;
 def review: .headRefOid as $head
-  | [ (.body // "") | splits("\r?\n") | capture("^[ \t]*Review: (?P<who>.+) at `?(?P<sha>[0-9a-f]{7,40})`?[ \t.]*$") ]
-  | if length == 0 then "no Review line"
+  | [ (.body // "") | splits("\r?\n") ] as $lines
+  | [ $lines[] | capture("^[ \t]*Review: (?P<who>.+) at `?(?P<sha>[0-9a-f]{7,40})`?[ \t.]*$") ]
+  | if length == 0 then (if any($lines[]; test("review:"; "i")) then "Review line unreadable" else "no Review line" end)
     else .[-1].sha as $sha
       | if ($head | startswith($sha)) then "cleared at head"
         else "review STALE (review \($sha[0:9]), head \($head[0:9]))" end end;
