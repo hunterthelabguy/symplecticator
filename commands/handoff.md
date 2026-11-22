@@ -118,7 +118,10 @@ labelled paragraphs after a three-line header.
 
 Rules: numbers are real (counted from the run, not remembered) or omitted; every
 ruling is named by its amendment or ledger number; the task states what not to
-invent; where the repo has no verify command, the Verify paragraph says so. For a
+invent; the task names only work that no Awaiting item blocks (blocked work is
+listed under Awaiting, not assigned: one block assigned a build its own Awaiting list
+forbade, and the next session spent a question round before it could start); where
+the repo has no verify command, the Verify paragraph says so. For a
 session that spans several repos, the header lists each repo and its commit, the
 Ground truth line names every repo path (as `~/...`), and the paragraphs stay singular.
 
