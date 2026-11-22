@@ -41,8 +41,9 @@ rewriting, without losing what the idea was for.
    request for you to rule on, and are not fixed first, because each fix
    would need another review.
 7. **Draft pull request.** You read the report, rule on anything it raised,
-   and merge, or tell Claude to merge that pull request. Claude never merges
-   one on its own.
+   and merge it once it reads cleared at head with green CI, or tell Claude
+   to. Claude merges only on your word for that pull request, quoted in it,
+   and never on its own.
 
 Two rules run through every step. *Independence:* each critic, simplifier
 and reviewer starts from a fresh context, so it cannot inherit the blind
