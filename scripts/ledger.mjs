@@ -411,6 +411,44 @@ export function next(dir, { waitMs = 10000 } = {}) {
   });
 }
 
+// ==== T5: merged
+
+export function ghPrState(number, repo) {
+  try {
+    return trim(execFileSync(process.env.LEDGER_GH || 'gh', ['pr', 'view', String(number), '--repo', repo, '--json', 'state', '--jq', '.state'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+  } catch (e) {
+    if (e.code === 'ENOENT') throw new LedgerError('merged: gh not found');
+    throw new LedgerError(`merged: gh failed for PR ${number}: ${trim(String(e.stderr || e.message))}`);
+  }
+}
+
+// Set every `round` row whose pull request has merged to `settled`, and commit the index alone. Every pull
+// request is asked about before anything is written, so a gh failure changes nothing. Asking takes seconds
+// and holds no lock; the write then takes the lock of next and starts from the index as it is by then, so a
+// number another session reserved meanwhile is kept, and a row it took out of `round` is left alone. The
+// commit subject has one length whatever the count; the ids are in its body.
+export function merged(dir, { prState = ghPrState, waitMs = 10000 } = {}) {
+  requireCleanIndex(dir, 'merged');
+  const first = loadRepo(dir).ix;
+  const asked = first.rows.filter((r) => r.status === 'round' && /^PR \d+$/.test(r.pr));
+  const repo = first.settings['pr-repo'];
+  if (asked.length && repo === 'none') throw new LedgerError('merged: rows name pull requests but pr-repo is none');
+  // An answer is about a pull request: a row pointed meanwhile at one that was not asked about is left.
+  const key = (r) => r.pr;
+  const done = new Set(asked.filter((r) => prState(Number(r.pr.slice(3)), repo) === 'MERGED').map(key));
+  return withLock(dir, 'merged', waitMs, () => {
+    requireCleanIndex(dir, 'merged');
+    const { ix } = loadRepo(dir);
+    const flipped = ix.rows.filter((r) => done.has(key(r)) && r.status === 'round');
+    if (!flipped.length) return [];
+    for (const r of flipped) r.status = 'settled';
+    const ids = flipped.map((r) => r.id);
+    commitIndex(dir, ix, `Ledger: ${ids.length} ${ids.length === 1 ? 'ruling' : 'rulings'} settled, merged`, ids.join('\n'));
+    return ids;
+  });
+}
+
 // ==== CLI
 
 function main(argv) {
@@ -432,6 +470,11 @@ function main(argv) {
     case 'next':
       console.log(next(dir));
       return 0;
+    case 'merged': {
+      const ids = merged(dir);
+      console.log(ids.length ? `settled: ${ids.join(', ')}` : 'no round has merged');
+      return 0;
+    }
     default:
       throw new LedgerError('usage: ledger.mjs <list|check|next|merged|move|init> [args]');
   }
