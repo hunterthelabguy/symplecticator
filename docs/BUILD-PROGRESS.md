@@ -13,17 +13,17 @@ do not exist on the base; T1, T2 and T3 create them.
 
 | Task | State | Commit | Verify |
 |---|---|---|---|
-| T1 commit-scan.sh | todo | | |
+| T1 commit-scan.sh | running |  |  |
 | T2 perturb-guard.mjs | todo | | |
 | T3 /perturb skill and hook | todo | | |
-| T4 frames skill | todo | | |
-| T5 showcase branches, ruling count | todo | | |
+| T4 frames skill | running |  |  |
+| T5 showcase branches, ruling count | running |  |  |
 | T6 setup, template, docs, CI | todo | | |
 | Floor-9 batch | todo | | |
 
 ## Agents
 
-Spawned: 0. Resumed: 0.
+Spawned: 3. Resumed: 0.
 
 ## Rulings
 
