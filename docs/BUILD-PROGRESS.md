@@ -13,17 +13,17 @@ do not exist on the base; T1, T2 and T3 create them.
 
 | Task | State | Commit | Verify |
 |---|---|---|---|
-| T1 commit-scan.sh | running |  |  |
+| T1 commit-scan.sh | in review | c90ac8e (task branch) | commit-scan all passed; 19 of 19 named mutants killed |
 | T2 perturb-guard.mjs | todo | | |
 | T3 /perturb skill and hook | todo | | |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
-| T5 showcase branches, ruling count | running |  |  |
+| T5 showcase branches, ruling count | in review | b4e1612 (task branch) | ground-truth all passed; 8 of 8 named mutants killed |
 | T6 setup, template, docs, CI | todo | | |
 | Floor-9 batch | todo | | |
 
 ## Agents
 
-Spawned: 4. Resumed: 0.
+Spawned: 6. Resumed: 0.
 
 ## Rulings
 
