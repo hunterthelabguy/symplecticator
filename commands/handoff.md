@@ -43,15 +43,24 @@ stop and ask.
 5. Before any merge, check the clearing review: the PR body's
    `Review: <reviewer> at <sha>` line must name the PR's head commit. Run the
    ground-truth script on the repo (section 4); it prints the verdict per open
-   PR: `cleared at head`, `review STALE` or `no Review line`. Where it cannot
-   (no GitHub, or an UNKNOWN line), compare by hand: `gh pr view --json
-   headRefOid,body`, or without GitHub, `git rev-parse HEAD`.
+   PR: `cleared at head`, `review STALE`, `Review line unreadable` or
+   `no Review line`. Where it cannot (no GitHub, or an UNKNOWN line), compare
+   by hand: `gh pr view --json headRefOid,body`, or without GitHub,
+   `git rev-parse HEAD`. Unreadable: read the body. Where the line reports a
+   clearing review by a context that wrote none of the diff, cleared at the
+   head, ask the owner before rewriting it in the form above with
+   `gh pr edit` (not a commit), then run the script again; otherwise treat
+   it as missing.
    Missing or stale: stop and ask for a fresh clearing review by a context that
    wrote none of the diff (the cost gate applies). A skipped review stays
    marked uncleared in the PR body, and merging it anyway is the owner's
-   explicit call, quoted there.
-6. Follow the landing rule exactly: open the PR, watch checks to green, merge by the
-   named method, sync main. Never merge before checks report. Where the rule allows
+   explicit call for that PR, quoted there.
+6. Follow the landing rule exactly: open the PR and watch checks to green. Merge by
+   the named method only on the owner's word for that PR, quoted in the PR, on a
+   head that is cleared (or carries the merge-anyway call above); a word for one PR
+   is not a word for the next. Without it, stop at the ready PR, say so, and list
+   the merge under Awaiting owner word. After a merge, sync main. Never merge
+   before checks report. Where the rule allows
    direct landing for ruled spec/docs commits, use it only for those. A cleared PR
    may list findings "Left for the owner". After the merge, any the owner has not
    ruled on go into the repo's living plan as open questions, landed by the repo's
@@ -113,7 +122,10 @@ labelled paragraphs after a three-line header.
 
 Rules: numbers are real (counted from the run, not remembered) or omitted; every
 ruling is named by its amendment or ledger number; the task states what not to
-invent; where the repo has no verify command, the Verify paragraph says so. For a
+invent; the task names only work that no Awaiting item blocks (blocked work is
+listed under Awaiting, not assigned: one block assigned a build its own Awaiting list
+forbade, and the next session spent a question round before it could start); where
+the repo has no verify command, the Verify paragraph says so. For a
 session that spans several repos, the header lists each repo and its commit, the
 Ground truth line names every repo path (as `~/...`), and the paragraphs stay singular.
 

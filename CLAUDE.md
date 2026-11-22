@@ -12,7 +12,9 @@ the rest: in setup, "the owner" means you, not the maintainer.
   run here (the jq checks without `gh` signed in, the gh-missing case when
   `gh` cannot be hidden) counts as skipped, not passed.
 - **Landing:** after commit zero, every change lands by pull request with
-  green CI, and the maintainer merges.
+  green CI. The maintainer merges, or Claude does on the maintainer's
+  word for that pull request, quoted in it, once the pull request reads
+  cleared at head with green CI. Merge method: merge commit.
 - **Living plan, archival spec, ledger:** none in this repository; the
   maintainer keeps decisions privately.
 - **Public text:** say "you" to the reader and "the owner" in Claude-facing

@@ -10,9 +10,9 @@ More is not better: this file loads every time the review runs, so an entry
 that misleads or no longer matches how the work is done is retired, not
 kept.
 
-The three seed entries come from one real run, on 2026-11-12, in a
-repository that is not public, so they name no PR. Retire them as your own
-runs produce entries.
+The first three entries come from one real run, on 2026-11-12, in a
+repository that is not public, so they name no PR; C5's project name is
+left out too. Retire them as your own runs produce entries.
 
 Format for an entry:
 
@@ -49,3 +49,26 @@ A fix round declined one finding with a reason: rewriting a media query as
 form either way. The delta reviewer made the change itself, built into a
 scratch folder, and compared the output; the reason held. Lesson: a reason
 for not fixing something is a claim, and a claim gets run.
+
+## C4. A sentence about a script's output, run instead of read (correct)
+
+symplecticator PR 3, 2026-11-12. The rule's own text said the ground-truth
+script "takes the last commit id on that line". The reviewer extracted the
+script's jq program, ran twelve Review-line variants through it, and showed
+that the line has to end at the commit id. The fix then predicted what the
+PR would read, and was wrong for a body with two Review lines; the next
+review found that the same way and graded it major, as a defect a fix round
+made. Lesson: text that says what a script reads or prints is a claim; run
+the program on fixtures, with one matching line and with several.
+
+## C5. A fix forked a pinned expression; nothing held the new branch (correct)
+
+A fix added a mode flag inside one expression, so a replay and a live run
+took different sides of it. Every old test reached only the live side, and
+the fix's three task reviews aimed their mutants at the new operand, not at
+the shared ones. The clearing review mutated each operand inside the new
+branch alone: a replay that ignored an event window's reach survived the
+full suite, and under it the code refused a file it had written. One test
+closed it. Lesson: a fix that adds a mode flag to shared code leaves each
+old test pinning only the branch it reaches, so mutate every operand inside
+the new branch.
