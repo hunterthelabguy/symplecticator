@@ -78,8 +78,9 @@ and hardened before the code. A test that kills no mutant the others miss is
 dead weight. A test is also too thick when it fails on a behavior-preserving
 change: a type-only pass with exact goldens is the free calibration, and any
 test failing there pins the implementation, not the spec. The score per
-area is a ratchet taken from a scheduled run and asserted in CI against the
-committed number, never run per PR. Order of work on a legacy area: measure
+area is a ratchet: taken from a periodic run (scheduled CI where the repo
+has it, or by hand), committed, and asserted against that number; the mutation
+run itself never runs per PR. Order of work on a legacy area: measure
 the net, thicken to the floor, then simplify or port. Limit: a wrong
 constant with a golden pinned to it survives every mutant; only a
 spec-derived test catches it. Deterministic first: the tool enumerates

@@ -144,8 +144,9 @@ folds of one plan once ran 585k, 754k, 818k and 888k tokens, and the
 plan's route came to more than three times the top of its estimate). Each
 pass's `COSTS.md` line (if the cost gate is on) logs tasks executed out of
 total and, from pass 2, the first task whose block changed since the last
-pass: the data a prefix-reuse scheme would need. Fixed point: if the pass found anything, run it again on the revision
-with a fresh context (different model or effort); stop at the first
+pass: the data a prefix-reuse scheme would need. Fixed point: if the pass
+found anything, run it again on the revision with a fresh context
+(different model or effort); stop at the first
 clean pass; cap three. A plan is ready for `/build` only after a clean
 pass, with every report attached. If the third pass still finds
 something, stop: hand the plan and every report to the owner; it is not

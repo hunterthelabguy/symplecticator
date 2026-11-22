@@ -40,9 +40,8 @@ Everything that could fail for lack of a human fails now, not at 1 a.m.
    this one short turn, before any other reading. State the number of tasks
    and the agent count: one implementer and one reviewer per task, the
    floor-9 batch if it is taken (one of each), the simplify passes (up to
-   three), and the final clearing review. Give what
-   similar steps cost before, from `~/.claude/COSTS.md`, or "not yet
-   measured". Then ask the one question: **[overnight]** "Start overnight?
+   three), and the final clearing review. Give what similar steps cost
+   before, from `~/.claude/COSTS.md`, or "not yet measured". Then ask the one question: **[overnight]** "Start overnight?
    Stay until you see 'You can leave now'." (this approves the night's
    budget); attended, the cost gate's run, lighter or skip, if the gate is
    on.

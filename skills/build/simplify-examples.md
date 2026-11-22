@@ -11,6 +11,9 @@ More is not better: this file loads every time the pass runs, so an entry
 that misleads or no longer matches how the work is done is retired, not
 kept.
 
+S1 to S7 come from real runs in one project, with its name and PR numbers
+left out. Retire them as your own runs produce entries.
+
 Format for an entry:
 
 ```
