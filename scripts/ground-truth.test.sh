@@ -340,6 +340,64 @@ else
     has "$T/verdicts.txt" "#10 [b] no CI, Review line unreadable: t"
 fi
 
+# Showcase branches: with only one inside 14 days, no header; a local one past 14 days is listed with its age, once
+# though it is also pushed, as is a pushed one no local branch holds; one inside 14 days is not, nor is an old branch
+# outside showcase/, local or pushed.
+git_q init -q --bare "$T/show-origin.git"
+git_q init -q "$T/show" && (
+  cd "$T/show" || exit 1
+  git symbolic-ref HEAD refs/heads/main
+  git_q commit --allow-empty -m first
+  git_q remote add origin "$T/show-origin.git"
+  new=$(( $(date +%s) - 5 * 86400 ))
+  git_q checkout -b showcase/2026-01-02-new main &&
+    GIT_COMMITTER_DATE="@$new" git_q commit --allow-empty -m new
+  git_q checkout main
+)
+run "$T/show-new.txt" --no-fetch "$T/show"
+check "showcase inside 14 days only: no header" lacks "$T/show-new.txt" "showcase branches older than"
+(
+  cd "$T/show" || exit 1
+  old=$(( $(date +%s) - 20 * 86400 ))
+  git_q checkout -b showcase/2026-01-01-old main &&
+    GIT_COMMITTER_DATE="@$old" git_q commit --allow-empty -m old && git_q push origin showcase/2026-01-01-old
+  git_q checkout -b showcase/2026-01-03-pushed main &&
+    GIT_COMMITTER_DATE="@$old" git_q commit --allow-empty -m pushed
+  git_q push origin showcase/2026-01-03-pushed
+  git_q checkout -b old-feature main &&
+    GIT_COMMITTER_DATE="@$old" git_q commit --allow-empty -m old-feature && git_q push origin old-feature
+  git_q checkout -b showcase/2026-01-04-edge-out main &&
+    GIT_COMMITTER_DATE="@$(( $(date +%s) - 14 * 86400 - 43200 ))" git_q commit --allow-empty -m edge-out
+  git_q checkout -b showcase/2026-01-05-edge-in main &&
+    GIT_COMMITTER_DATE="@$(( $(date +%s) - 13 * 86400 - 43200 ))" git_q commit --allow-empty -m edge-in
+  git_q checkout main
+  git_q branch -D showcase/2026-01-03-pushed
+)
+run "$T/show.txt" --no-fetch "$T/show"
+check "showcase past 14 days: listed under its header" has "$T/show.txt" "  showcase branches older than 14 days:"
+check "showcase past 14 days: its age" has "$T/show.txt" "    showcase/2026-01-01-old: 20 days old"
+check "showcase past 14 days, local and pushed: listed once" [ "$(grep -c 'showcase/2026-01-01-old: 20 days old' "$T/show.txt")" = 1 ]
+check "showcase past 14 days, pushed only: listed" has "$T/show.txt" "    origin/showcase/2026-01-03-pushed: 20 days old"
+check "showcase inside 14 days: not listed" lacks "$T/show.txt" "    showcase/2026-01-02-new: 5 days old"
+check "old branch outside showcase/: not listed" lacks "$T/show.txt" "old-feature: 20 days old"
+check "showcase 14 and a half days old: listed" has "$T/show.txt" "    showcase/2026-01-04-edge-out: 14 days old"
+check "showcase 13 and a half days old: not listed" lacks "$T/show.txt" "showcase/2026-01-05-edge-in: 13 days old"
+# A branch named exactly showcase, local or pushed, is not a showcase branch. git refuses it beside showcase/
+# branches, so it gets a repo of its own.
+git_q init -q --bare "$T/show-bare-origin.git"
+git_q init -q "$T/show-bare" && (
+  cd "$T/show-bare" || exit 1
+  git symbolic-ref HEAD refs/heads/main
+  git_q commit --allow-empty -m first
+  git_q remote add origin "$T/show-bare-origin.git"
+  git_q checkout -b showcase main &&
+    GIT_COMMITTER_DATE="@$(( $(date +%s) - 20 * 86400 ))" git_q commit --allow-empty -m showcase &&
+    git_q push origin showcase
+  git_q checkout main
+)
+run "$T/show-bare.txt" --no-fetch "$T/show-bare"
+check "a branch named exactly showcase, local or pushed: not listed" lacks "$T/show-bare.txt" "showcase: 20 days old"
+
 echo
 if [ "$failures" -gt 0 ]; then
   echo "$failures check(s) FAILED, $skipped skipped"

@@ -292,6 +292,22 @@ for repo in ${REPOS[@]+"${REPOS[@]}"}; do
     printf '%s' "$others"
   fi
 
+  # Showcase branches (from /perturb) past 14 days, local or pushed, each listed once (a local branch stands for
+  # its pushed copy): /handoff asks the owner to delete or keep each. 14 is a placeholder number, revisited at the
+  # review cadence.
+  SHOWCASE_DAYS=14
+  now=$(date +%s)
+  old=$(git -C "$repo" for-each-ref --format='%(committerdate:unix) %(refname:short)' \
+    refs/heads/showcase/ "refs/remotes/$REMOTE/showcase/" |
+    awk -v now="$now" -v d="$SHOWCASE_DAYS" -v r="$REMOTE/" '
+      index($2, r) == 1 && (substr($2, length(r) + 1) in seen) { next }
+      { seen[$2] = 1 }
+      $1 < now - d * 86400 { printf "    %s: %d days old\n", $2, (now - $1) / 86400 }')
+  if [ -n "$old" ]; then
+    echo "  showcase branches older than $SHOWCASE_DAYS days:"
+    printf '%s\n' "$old"
+  fi
+
   # Open PRs with their CI and review verdicts.
   if [ "$url_ok" = 0 ]; then
     : # no remote, or an unreadable URL already counted as UNKNOWN
