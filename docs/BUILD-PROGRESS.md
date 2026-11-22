@@ -13,17 +13,17 @@ do not exist on the base; T1, T2 and T3 create them.
 
 | Task | State | Commit | Verify |
 |---|---|---|---|
-| T1 commit-scan.sh | re-check | cdf09cc (task branch) | commit-scan all passed; 22 of 22 mutants killed |
-| T2 perturb-guard.mjs | todo | | |
+| T1 commit-scan.sh | done | 445f9df (merge 2c873fc) | commit-scan all passed; 22 of 22 mutants killed; suites green after merge |
+| T2 perturb-guard.mjs | running |  |  |
 | T3 /perturb skill and hook | todo | | |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
-| T5 showcase branches, ruling count | re-check | a42af3d (task branch) | ground-truth all passed; 12 of 12 mutants killed |
+| T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
 | T6 setup, template, docs, CI | todo | | |
 | Floor-9 batch | todo | | |
 
 ## Agents
 
-Spawned: 6. Resumed: 5.
+Spawned: 7. Resumed: 5.
 
 ## Rulings
 
@@ -85,3 +85,19 @@ Spawned: 6. Resumed: 5.
   (f) survive), and option B killed all 12 mutants in scratch; cost if
   wrong: the trailing-slash pattern behaves otherwise on an older git
   (macOS CI would show it).
+- Ruling (Claude): the commit scan landed by replay with its
+  re-check's corrected last sentence ("a red run of the test as
+  committed, again before commit-scan.sh existed, ends ... 39
+  FAILED"); why: the reviewer read the earlier wording as naming the
+  first run; cost if wrong: one reworded body.
+- Batch list (Minor, for the floor-9 batch): the scan's untracked
+  files unpinned (a mutant scanning them survives, erring toward
+  refusing); the scan's error line numbers unpinned when comments come
+  first; the scan test's header line 9 wider than the rest; the
+  showcase test section's opening comment not naming the edge
+  fixtures.
+- For the owner (not the batch): the scan's three plan-acknowledged
+  survivors (`-I`, the last-tab split, the message grep's exit test);
+  hits sorted lexically (line 10 before line 2); a stale local
+  showcase branch standing for a newer pushed copy (the plan's
+  interface).
