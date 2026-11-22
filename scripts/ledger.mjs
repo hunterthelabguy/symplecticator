@@ -95,10 +95,177 @@ export function formatLedger(ledger) {
   return ledger.segs.map((s) => s.text).join('');
 }
 
+// ==== T2: index and check
+
+const COLS = ['id', 'date', 'status', 'round', 'pr', 'superseded-by', 'file', 'title'];
+const OPEN_COLS = ['item', 'ruling', 'opened'];
+export const STATUSES = ['reserved', 'standing', 'round', 'settled', 'superseded', 'unclassified'];
+export const DEFAULT_THRESHOLD = 131072;
+
+function splitRow(line) {
+  const s = trim(line);
+  if (s.length < 2 || !s.startsWith('|') || !s.endsWith('|')) throw new LedgerError(`${INDEX}: not a table row: ${s}`);
+  const cells = [];
+  let cur = '';
+  for (let i = 1; i < s.length; i++) {
+    if (s[i] === '\\' && s[i + 1] === '|') { cur += '|'; i++; }
+    else if (s[i] === '|') { cells.push(trim(cur)); cur = ''; }
+    else cur += s[i];
+  }
+  return cells;
+}
+
+// A table is its heading row, a separator row (cells of dashes, colons allowed at the ends), then data rows.
+function parseTable(body, cols, name) {
+  const lines = body.split(/\r?\n/).filter((l) => !blank(l));
+  if (!lines.length || splitRow(lines[0]).join(' | ') !== cols.join(' | ')) {
+    throw new LedgerError(`${INDEX}: the ${name} table must start with the row | ${cols.join(' | ')} |`);
+  }
+  const rule = lines.length > 1 ? splitRow(lines[1]) : [];
+  if (rule.length !== cols.length || !rule.every((c) => /^:?-+:?$/.test(c))) {
+    throw new LedgerError(`${INDEX}: the ${name} table needs a separator row (| --- | --- |) as its second line`);
+  }
+  return lines.slice(2).map((line) => {
+    const cells = splitRow(line);
+    if (cells.length !== cols.length) throw new LedgerError(`${INDEX}: ${cols.length} cells expected, ${cells.length} found: ${trim(line)}`);
+    return Object.fromEntries(cols.map((c, i) => [c, cells[i]]));
+  });
+}
+
+export function parseIndex(text) {
+  const parts = text.split(/^## (Settings|Rulings|Open items)[ \t]*\r?\n/m);
+  if (parts.length !== 7 || parts[1] !== 'Settings' || parts[3] !== 'Rulings' || parts[5] !== 'Open items') {
+    throw new LedgerError(`${INDEX}: needs the sections Settings, Rulings and Open items, once each, in that order`);
+  }
+  const settings = {};
+  for (const line of parts[2].split(/\r?\n/)) {
+    if (blank(line)) continue;
+    const m = line.match(/^- ([a-z-]+): ([^ \t].*)$/);
+    if (!m) throw new LedgerError(`${INDEX}: not a setting: ${line}`);
+    settings[m[1]] = trim(m[2]);
+  }
+  settings['pr-repo'] ??= 'none';
+  settings['threshold-bytes'] ??= String(DEFAULT_THRESHOLD);
+  if (!/^[A-Z]+$/.test(settings.prefix || '')) throw new LedgerError(`${INDEX}: the prefix setting must be capital letters`);
+  if (!/^\d+$/.test(settings['threshold-bytes'])) throw new LedgerError(`${INDEX}: threshold-bytes must be a whole number`);
+  return {
+    eol: text.includes('\r\n') ? '\r\n' : '\n',
+    intro: parts[0],
+    settings,
+    rows: parseTable(parts[4], COLS, 'Rulings'),
+    open: parseTable(parts[6], OPEN_COLS, 'Open items'),
+  };
+}
+
+export function formatIndex(ix) {
+  const row = (cells) => '|' + cells.map((c) => (c === '' ? ' ' : ` ${String(c).replace(/\|/g, '\\|')} `)).join('|') + '|';
+  const table = (cols, rows) => [row(cols), '|' + cols.map(() => '---').join('|') + '|', ...rows.map((r) => row(cols.map((c) => r[c])))];
+  const lines = [
+    '## Settings', '',
+    ...Object.entries(ix.settings).map(([k, v]) => `- ${k}: ${v}`), '',
+    '## Rulings', '', ...table(COLS, ix.rows), '',
+    '## Open items', '', ...table(OPEN_COLS, ix.open), '',
+  ];
+  return ix.intro + lines.join(ix.eol);
+}
+
+// An open item is closed when its item cell is struck through from end to end. A row struck cell by cell is
+// closed the same way, and its ruling id is read through the strike. An item cell struck in part is open, and
+// so is one with `~~` inside the strike (that is two strikes with open words between them) or with nothing
+// inside it. One tilde inside is text, but not as the last character: `~~a~~~` is open.
+const STRUCK = /^~~((?:(?!~~).)+)~~$/;
+export const isClosed = (item) => STRUCK.test(item.item);
+const unstruck = (cell) => cell.replace(STRUCK, '$1');
+
+// Both ledger files, parsed. Whether numbered entries are bullets is decided once for the two of them, so an
+// old bullet with no number is still an entry in a file the numbered bullets have all left.
+function readLedgers(dir, prefix) {
+  const texts = [ACTIVE, SETTLED].map((f) => (fs.existsSync(path.join(dir, f)) ? read(path.join(dir, f)) : null));
+  const bullets = texts.some((text) => text !== null && hasNumberedBullets(text, prefix));
+  return texts.map((text) => (text === null ? null : parseLedger(text, prefix, { bullets })));
+}
+
+export function loadRepo(dir) {
+  const at = (f) => path.join(dir, f);
+  if (!fs.existsSync(at(INDEX))) throw new LedgerError(`${INDEX} not found; run init first`);
+  if (!fs.existsSync(at(ACTIVE))) throw new LedgerError(`${ACTIVE} not found`);
+  const ix = parseIndex(read(at(INDEX)));
+  const [active, settled] = readLedgers(dir, ix.settings.prefix);
+  const where = new Map();
+  for (const [file, ledger] of [[ACTIVE, active], [SETTLED, settled]]) {
+    for (const s of ledger ? ledger.segs : []) {
+      if (s.id === null) continue;
+      if (!where.has(s.id)) where.set(s.id, []);
+      where.get(s.id).push({ file, seg: s });
+    }
+  }
+  return { ix, active, settled, where, activeBytes: fs.statSync(at(ACTIVE)).size };
+}
+
+export function check(dir) {
+  const { ix, where, activeBytes } = loadRepo(dir);
+  const problems = [];
+  const notices = [];
+  const rowIds = new Set();
+  for (const [id, places] of where) {
+    if (places.length > 1) problems.push(`${id}: ${places.length} entries (${places.map((p) => p.file).join(', ')})`);
+  }
+  for (const r of ix.rows) {
+    if (rowIds.has(r.id)) problems.push(`${r.id}: more than one row`);
+    rowIds.add(r.id);
+    if (!STATUSES.includes(r.status)) problems.push(`${r.id}: unknown status "${r.status}"`);
+    if (r.pr !== 'none' && !/^PR \d+$/.test(r.pr)) problems.push(`${r.id}: pr must be "PR n" or "none", found "${r.pr}"`);
+    const places = where.get(r.id) || [];
+    if (r.status === 'reserved') {
+      if (places.length) problems.push(`${r.id}: the row is reserved but its entry is written; fill the row`);
+      else notices.push(`${r.id}: reserved`);
+      continue;
+    }
+    if (r.status === 'unclassified') notices.push(`${r.id}: unclassified`);
+    if (!places.length) problems.push(`${r.id}: a row with no entry`);
+    else if (places.length === 1 && places[0].file !== r.file) problems.push(`${r.id}: the row says ${r.file}, the entry is in ${places[0].file}`);
+  }
+  for (const r of ix.rows) {
+    if (r.status === 'superseded' && !rowIds.has(r['superseded-by'])) {
+      problems.push(`${r.id}: superseded-by must name a ruling in the index, found "${r['superseded-by']}"`);
+    }
+  }
+  for (const id of where.keys()) if (!rowIds.has(id)) problems.push(`${id}: an entry with no row`);
+  for (const o of ix.open) if (!rowIds.has(unstruck(o.ruling))) problems.push(`open item "${o.item}": no ruling ${unstruck(o.ruling)} in the index`);
+  const threshold = Number(ix.settings['threshold-bytes']);
+  notices.push(`${ACTIVE}: ${activeBytes} bytes, threshold ${threshold}${activeBytes > threshold ? ': over, run move' : ''}`);
+  notices.push(`open items: ${ix.open.filter((o) => !isClosed(o)).length}`);
+  return { problems, notices };
+}
+
+export function list(dir) {
+  const { ix, where } = loadRepo(dir);
+  const status = new Map(ix.rows.map((r) => [r.id, r.status]));
+  const out = [];
+  for (const [id, places] of where) {
+    for (const p of places) out.push({ id, bytes: p.seg.text.length, file: p.file, status: status.get(id) || '-' });
+  }
+  return out;
+}
+
 // ==== CLI
 
-function main() {
-  throw new LedgerError('usage: ledger.mjs <list|check|next|merged|move|init> [args]');
+function main(argv) {
+  const [command, ...args] = argv;
+  const dir = process.cwd();
+  switch (command) {
+    case 'list':
+      for (const e of list(dir)) console.log([e.id, e.bytes, e.file, e.status].join('\t'));
+      return 0;
+    case 'check': {
+      const { problems, notices } = check(dir);
+      for (const p of problems) console.log(`FAIL  ${p}`);
+      for (const n of notices) console.log(`note  ${n}`);
+      return problems.length ? 1 : 0;
+    }
+    default:
+      throw new LedgerError('usage: ledger.mjs <list|check|next|merged|move|init> [args]');
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) {

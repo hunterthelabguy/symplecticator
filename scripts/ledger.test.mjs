@@ -156,3 +156,144 @@ test("another ledger's prefix is not an entry here", () => {
   assert.deepEqual(ids('# T\n\nR12. "x"\n\nR1. "y"\n', 'R'), [null, 'R12', 'R1']);
 });
 
+// ==== T2: index and check
+
+test('the index parses and formats back to the same text', () => {
+  const text = index('R', [['R1', 'standing'], ['`Design note`', 'settled', 'LEDGER_SETTLED.md', 'PR 4']], { open: [['~~done~~', 'R1'], ['a \\| b', 'R1'], ['~~half~~ done', 'R1']] });
+  const ix = L.parseIndex(text);
+  assert.equal(L.formatIndex(ix), text);
+  assert.deepEqual(ix.rows[1], { id: '`Design note`', date: '2030-01-01', status: 'settled', round: '', pr: 'PR 4', 'superseded-by': '', file: 'LEDGER_SETTLED.md', title: 't' });
+  assert.equal(ix.open[1].item, 'a | b');
+  assert.deepEqual(ix.open.map(L.isClosed), [true, false, false]);
+  assert.deepEqual(ix.settings, { 'pr-repo': 'none', 'threshold-bytes': '131072', prefix: 'R' });
+  assert.equal(L.parseIndex(text.replace(/\n/g, '\r\n')).rows.length, 2);
+  assert.equal(L.formatIndex(L.parseIndex(text.replace(/\n/g, '\r\n'))), text.replace(/\n/g, '\r\n'));
+  // A separator row may carry colons and spaces; it is written back plain.
+  const aligned = text.replace('|---|---|---|---|---|---|---|---|', '| :--- | :---: | ---: | - | --- | --- | --- | --- |').replace('\n|---|---|---|\n', '\n| :-- | --: | - |\n');
+  assert.equal(L.formatIndex(L.parseIndex(aligned)), text);
+  // A tab beside a cell is white space, at either end.
+  assert.equal(L.formatIndex(L.parseIndex(text.replace('| R1 | 2030-01-01 |', '|\tR1 | 2030-01-01\t|'))), text);
+});
+
+test('an index cell keeps the byte 0xA0 at either end', () => {
+  const text = index('R', [['R1', 'standing']], { open: [['voil\xc3\xa0', 'R1'], ['\xa0x\xa0', 'R1']] }).replace('| t |', '| d\xc3\xa9j\xc3\xa0 |');
+  const ix = L.parseIndex(text);
+  assert.equal(ix.rows[0].title, 'd\xc3\xa9j\xc3\xa0');
+  assert.deepEqual(ix.open.map((o) => o.item), ['voil\xc3\xa0', '\xa0x\xa0']);
+  assert.equal(L.formatIndex(ix), text);
+});
+
+test('an index that cannot be parsed is refused', () => {
+  const good = index('R', [['R1', 'standing']]);
+  refuses(() => L.parseIndex(good.replace('## Open items', '## Open')), /needs the sections Settings, Rulings and Open items/);
+  refuses(() => L.parseIndex(good + '\n## Rulings\n'), /needs the sections/);
+  refuses(() => L.parseIndex(good.replace('| LEDGER.md | t |', '| LEDGER.md |')), /8 cells expected, 7 found/);
+  refuses(() => L.parseIndex(good.replace('| id | date |', '| id | day |')), /the Rulings table must start with the row \| id \| date \|/);
+  refuses(() => L.parseIndex(good.replace('- prefix: R', '- prefix: r1')), /prefix setting must be capital letters/);
+  refuses(() => L.parseIndex(good.replace('- prefix: R', 'prefix = R')), /not a setting: prefix = R/);
+  refuses(() => L.parseIndex(good.replace('131072', 'big')), /threshold-bytes must be a whole number/);
+  refuses(() => L.parseIndex(good.replace('| R1 |', 'R1 |')), /not a table row/);
+  // A table needs its separator row: without one the first data row would be taken for it and dropped.
+  const items = index('R', [['R1', 'standing']], { open: [['one', 'R1'], ['two', 'R1']] });
+  const noRule = [
+    [good.replace('|---|---|---|---|---|---|---|---|\n', ''), 'Rulings'],
+    [good.replace('|---|---|---|---|---|---|---|---|', '|---|---|---|---|---|---|---|'), 'Rulings'],
+    [good.replace('|---|---|---|---|---|---|---|---|', '|---|---|---|---|---|---|---|-x-|'), 'Rulings'],
+    [items.replace('\n|---|---|---|\n', '\n'), 'Open items'],
+    [good.replace('\n|---|---|---|\n', '\n'), 'Open items'],
+    [items.replace('\n|---|---|---|\n', '\n|---|---|---|---|\n'), 'Open items'],
+    [items.replace('\n|---|---|---|\n', '\n|:|---|---|\n'), 'Open items'],
+    [items.replace('\n|---|---|---|\n', '\n|::-|---|---|\n'), 'Open items'],
+  ];
+  for (const [text, name] of noRule) {
+    refuses(() => L.parseIndex(text), new RegExp(`^LEDGER_INDEX\\.md: the ${name} table needs a separator row \\(\\| --- \\| --- \\|\\) as its second line$`));
+  }
+});
+
+test('check passes a ledger whose every entry has one row', (t) => {
+  const dir = repo(t, {
+    'LEDGER.md': ledger('R1', 'R3'), 'LEDGER_SETTLED.md': ledger('R2'),
+    'LEDGER_INDEX.md': index('R', [['R1', 'standing'], ['R2', 'superseded', 'LEDGER_SETTLED.md', 'none', 'R3'], ['R3', 'round', 'LEDGER.md', 'PR 12'], ['R4', 'reserved']], { open: [['an item', 'R3']] }),
+  });
+  assert.deepEqual(L.check(dir).problems, []);
+  const run = cli(dir, 'check');
+  assert.equal(run.status, 0);
+  assert.match(run.stdout, /^note  R4: reserved$/m);
+});
+
+test('check names each kind of break', (t) => {
+  const base = { 'LEDGER.md': ledger('R1', 'R3'), 'LEDGER_SETTLED.md': ledger('R2') };
+  const rows = [['R1', 'standing'], ['R2', 'settled', 'LEDGER_SETTLED.md'], ['R3', 'round']];
+  const cases = [
+    [{ 'LEDGER.md': ledger('R1', 'R3', 'R5') }, rows, {}, 'R5: an entry with no row'],
+    [{}, [...rows, ['R6', 'standing']], {}, 'R6: a row with no entry'],
+    [{ 'LEDGER.md': ledger('R1', 'R3', 'R2') }, rows, {}, 'R2: 2 entries (LEDGER.md, LEDGER_SETTLED.md)'],
+    [{ 'LEDGER.md': ledger('R1', 'R3', 'R3') }, rows, {}, 'R3: 2 entries (LEDGER.md, LEDGER.md)'],
+    [{}, [...rows, ['R3', 'round']], {}, 'R3: more than one row'],
+    [{}, [rows[0], ['R2', 'settled', 'LEDGER.md'], rows[2]], {}, 'R2: the row says LEDGER.md, the entry is in LEDGER_SETTLED.md'],
+    [{}, [['R1', 'standing', 'LEDGER_SETTLED.md'], rows[1], rows[2]], {}, 'R1: the row says LEDGER_SETTLED.md, the entry is in LEDGER.md'],
+    [{}, [['R1', 'archived'], rows[1], rows[2]], {}, 'R1: unknown status "archived"'],
+    [{}, [['R1', 'superseded'], rows[1], rows[2]], {}, 'R1: superseded-by must name a ruling in the index, found ""'],
+    [{}, [['R1', 'superseded', 'LEDGER.md', 'none', 'R9'], rows[1], rows[2]], {}, 'R1: superseded-by must name a ruling in the index, found "R9"'],
+    [{}, rows, { open: [['an item', 'R9']] }, 'open item "an item": no ruling R9 in the index'],
+    [{}, rows, { open: [['~~an item~~', '~~R8~~', '~~2030-01-01~~']] }, 'open item "~~an item~~": no ruling R8 in the index'],
+    [{}, [['R1', 'standing', 'LEDGER.md', '12'], rows[1], rows[2]], {}, 'R1: pr must be "PR n" or "none", found "12"'],
+    [{}, [['R1', 'reserved'], rows[1], rows[2]], {}, 'R1: the row is reserved but its entry is written; fill the row'],
+  ];
+  for (const [files, caseRows, options, problem] of cases) {
+    const dir = repo(t, { ...base, ...files, 'LEDGER_INDEX.md': index('R', caseRows, options) });
+    assert.deepEqual(L.check(dir).problems, [problem]);
+    const run = cli(dir, 'check');
+    assert.equal(run.status, 1, problem);
+    assert.ok(run.stdout.includes(`FAIL  ${problem}\n`), problem);
+  }
+});
+
+test('check counts a struck open item as closed and reports the size against the threshold', (t) => {
+  const files = { 'LEDGER.md': ledger('R1') };
+  const size = files['LEDGER.md'].length;
+  const one = repo(t, { ...files, 'LEDGER_INDEX.md': index('R', [['R1', 'unclassified']], { open: [['~~closed~~', 'R1'], ['still open', 'R1']], threshold: size }) });
+  assert.deepEqual(L.check(one).notices, ['R1: unclassified', `LEDGER.md: ${size} bytes, threshold ${size}`, 'open items: 1']);
+  const two = repo(t, { ...files, 'LEDGER_INDEX.md': index('R', [['R1', 'standing']], { open: [['a', 'R1'], ['b', 'R1']], threshold: size - 1 }) });
+  assert.deepEqual(L.check(two).notices, [`LEDGER.md: ${size} bytes, threshold ${size - 1}: over, run move`, 'open items: 2']);
+});
+
+test('a struck open-item row is read as closed, whether its item cell or every cell is struck', (t) => {
+  const open = [
+    ['~~item cell struck~~', 'R1'], ['~~every cell struck~~', '~~R2~~', '~~2030-01-01~~'], ['~~struck~~ in part', 'R1'], ['open', '~~R2~~'],
+    // Two strikes with open words between them are a cell struck in part; one tilde inside a strike is text.
+    ['~~done~~ closed by ~~R2~~', 'R1'], ['~~about ~5 of them~~', 'R1'],
+    // A strike with nothing in it strikes nothing.
+    ['~~~~', 'R1'],
+  ];
+  const dir = repo(t, { 'LEDGER.md': ledger('R1', 'R2'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing'], ['R2', 'standing']], { open }) });
+  const found = L.check(dir);
+  assert.deepEqual(found.problems, []);
+  assert.deepEqual(L.parseIndex(get(dir, 'LEDGER_INDEX.md')).open.map(L.isClosed), [true, true, false, false, false, true, false]);
+  assert.equal(found.notices.at(-1), 'open items: 4');
+  assert.equal(L.formatIndex(L.parseIndex(get(dir, 'LEDGER_INDEX.md'))), get(dir, 'LEDGER_INDEX.md'));
+});
+
+test('list prints every entry with its size, file and status', (t) => {
+  const dir = repo(t, {
+    'LEDGER.md': ledger('K1', 'K3'), 'LEDGER_SETTLED.md': ledger('K2'),
+    'LEDGER_INDEX.md': index('K', [['K1', 'standing'], ['K2', 'settled', 'LEDGER_SETTLED.md']]),
+  });
+  const run = cli(dir, 'list');
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, `K1\t${entry('K1').length}\tLEDGER.md\tstanding\nK3\t${entry('K3').length - 1}\tLEDGER.md\t-\nK2\t${entry('K2').length - 1}\tLEDGER_SETTLED.md\tsettled\n`);
+});
+
+test('a command refuses with exit 2 when the index is missing or broken, or the command is unknown', (t) => {
+  const dir = repo(t, { 'LEDGER.md': ledger('R1') });
+  let run = cli(dir, 'check');
+  assert.equal(run.status, 2);
+  assert.equal(run.stderr, 'LEDGER_INDEX.md not found; run init first\n');
+  put(dir, 'LEDGER_INDEX.md', 'not an index\n');
+  run = cli(dir, 'list');
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /needs the sections/);
+  run = cli(dir, 'archive');
+  assert.equal(run.status, 2);
+  assert.match(run.stderr, /^usage: ledger\.mjs <list\|check\|next\|merged\|move\|init> \[args\]\n$/);
+});
