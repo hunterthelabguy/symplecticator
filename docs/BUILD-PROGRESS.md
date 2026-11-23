@@ -19,11 +19,11 @@ do not exist on the base; T1, T2 and T3 create them.
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
 | T6 setup, template, docs, CI | done | e012012 | full verify green: all five suites; both greps empty |
-| Floor-9 batch | running | - | - |
+| Floor-9 batch | review | 7f6ccd6 | X5, X7, |& mutant killed alone; no earlier kill lost; five suites green |
 
 ## Agents
 
-Spawned: 14. Resumed: 13.
+Spawned: 15. Resumed: 13.
 
 ## Notes
 
