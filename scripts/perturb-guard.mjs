@@ -255,7 +255,7 @@ const PREFIX = new Set(['{', 'if', 'then', 'elif', 'else', 'do', 'while', 'until
 // Wrappers that run the command after them, with their options that take a value.
 const WRAP = {
   env: /^(-u|--unset|-C|--chdir|-S|--split-string)$/, timeout: /^(-s|--signal|-k|--kill-after)$/,
-  nice: /^(-n|--adjustment)$/, sudo: /^(-u|--user|-g|--group)$/, exec: /^-a$/, command: null, time: null, nohup: null,
+  nice: /^(-n|--adjustment)$/, sudo: /^(-u|--user|-g|--group)$/, exec: /^-a$/, command: null, builtin: null, time: null, nohup: null,
 };
 
 // The command's words: redirections and their targets dropped, then leading reserved words, env assignments and
@@ -433,6 +433,15 @@ function checkCommit(rest, repo, command) {
 // after it is refused.
 const KEEPS = new Set(['&&', ';', '\n', 'end']);
 const keepsCd = (toks) => !toks.sub && !toks.paren && KEEPS.has(toks.sep);
+// The folder a cd names: its options (-L, -P, -e, -@ and clusters of them) and a -- skipped. Any other word
+// starting with - is an invalid option, after which bash moves nowhere, so the folder stays.
+function cdTarget(rest) {
+  let i = 0;
+  while (/^-[LPe@]+$/.test(rest[i] ?? '')) i++;
+  if (rest[i] === '--') i++;
+  else if (/^-./.test(rest[i] ?? '')) return '';
+  return rest[i] ?? '';
+}
 
 function bash(command, cwd) {
   const rules = protectedRules(cwd);
@@ -450,7 +459,7 @@ function bash(command, cwd) {
       if (hasGlob(t) ? globHits(t, cwd, rules) : holdsProtected(t, cwd, rules)) refuse(`a recursive copy to ${t}`, 'it is or holds protected config under /perturb');
     }
     const [cmd, ...rest] = words(toks);
-    if (cmd === 'cd' && keepsCd(toks)) { if (rest[0]) cwd = toPath(rest[0], cwd); continue; }
+    if (cmd === 'cd' && keepsCd(toks)) { const d = cdTarget(rest); if (d) cwd = toPath(d, cwd); continue; }
     if (cmd === 'gh') {
       const g = rest.filter((a, i) => !/^(-R|--repo)$/.test(a) && !/^(-R|--repo)$/.test(rest[i - 1] ?? '') && !/^(-R.|--repo=)/.test(a));
       if (g[0] === 'pr' && g[1] === 'merge') refuse('gh pr merge', "merges are the owner's");
