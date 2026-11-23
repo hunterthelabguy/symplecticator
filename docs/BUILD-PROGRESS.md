@@ -18,12 +18,12 @@ do not exist on the base; T1, T2 and T3 create them.
 | T3 /perturb skill and hook | done | 47a8c88 | full verify green: all five suites; hook 7 of 7, guard 23 of 23 |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
-| T6 setup, template, docs, CI | fix round 1 | 2a165cd | review: checkboxes as given, five suites green; 1 Important (badge caption) |
-| Floor-9 batch | todo | | |
+| T6 setup, template, docs, CI | done | e012012 | full verify green: all five suites; both greps empty |
+| Floor-9 batch | running | - | - |
 
 ## Agents
 
-Spawned: 12. Resumed: 13.
+Spawned: 13. Resumed: 13.
 
 ## Rulings
 
@@ -170,3 +170,17 @@ Spawned: 12. Resumed: 13.
 - For the owner: the Windows CI job's guard suite runs commit-scan.sh
   through whatever `bash` the runner's PATH resolves; if that is not Git
   Bash, the job fails and is fixed in the pull request.
+- Ruling (Claude): the guard's cd-after-a-pipe gap leaves the floor-9
+  batch for the owner instead of landing; why: a scratch prototype (a cd
+  marked piped is ordinary) killed the pipe form and kept the suite
+  green, but probing its neighbours found the same fault by another
+  input: from the home config folder, `false && cd /; rm CLAUDE.md` and
+  `true || cd /; rm CLAUDE.md` both exit 0 on the tip and on the
+  prototype, while bash skips the cd and removes the protected file; a
+  fix at the root (a cd whose running bash decides at run time) is a
+  design question for the owner; cost if wrong: the pipe form stays
+  open until the owner rules.
+- Ruling (Claude): the parser comment on the depth step's order stays as
+  intent; why: the order is equivalent today (no test can pin it) and the
+  comment states the reading a later change would need; cost if wrong:
+  one comment line.
