@@ -6,8 +6,10 @@
 # `commit -a` would add), different hits in the index and the working tree, a scan started from a subfolder, the
 # second of two rules, a rule that starts with a dash, a rule that holds #, case, a message file by absolute,
 # relative and backslash path (every hit line), hits in a file and the message together, a missing message file, a
-# folder that is not a repo, a list with CRLF endings and no final newline, a list with one rule, and the refusals that keep an empty or broken scan from reading as a pass
-# (no list, a list with no rules, a malformed rule, a regex grep cannot read). Exit 0 = every check passed.
+# folder that is not a repo, a list with CRLF endings and no final newline, a list with one rule, an untracked file
+# (not scanned), and the refusals that keep an empty or broken scan from reading as a pass (no list, a list with no
+# rules, a malformed rule, a regex grep cannot read, named by its line counted with comment and blank lines).
+# Exit 0 = every check passed.
 #
 # Usage: bash scripts/commit-scan.test.sh
 
@@ -72,6 +74,11 @@ run "$T/out" "$T/repo"; code=$?
 check "unstaged edit in a tracked file: found" has "$T/out" "clean.txt:2: zanzibar"
 git checkout -q -- clean.txt
 
+echo "zanzibar" >loose.txt
+run "$T/out" "$T/repo"; code=$?
+check "untracked file with a hit: not reported" empty "$T/out"
+rm loose.txt
+
 printf 'subject\n\nsigned zanzibar\nzanzibar again\n' >"$T/msg.txt"
 run "$T/out" "$T/repo" "$T/msg.txt"; code=$?
 check "message file, absolute path: exit 1" [ "$code" = 1 ]
@@ -117,6 +124,9 @@ printf 'bad regex\t(unclosed\n' >"$PAT"
 run "$T/out" "$T/repo"; code=$?
 check "a regex grep cannot read: exit 1" [ "$code" = 1 ]
 check "a regex grep cannot read: names the line" has "$T/out" "commit-scan: rule on line 1"
+printf '# a comment, then a blank line\n\nbad regex\t(unclosed\n' >"$PAT"
+run "$T/out" "$T/repo"; code=$?
+check "a regex grep cannot read: its line counts comment and blank lines" has "$T/out" "commit-scan: rule on line 3 failed"
 rm "$PAT"
 run "$T/out" "$T/repo"; code=$?
 check "no pattern list: exit 1" [ "$code" = 1 ]
