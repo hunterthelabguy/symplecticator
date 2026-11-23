@@ -27,6 +27,8 @@ Spawned: 18. Resumed: 17.
 
 ## Notes
 
+Simplify pass 2: clean, no commit; the loop ends after one landed pass.
+
 Simplify pass 1 landed: 50c8088 (proposed 9, applied 4, left 5); full verify green. Pass 2 running.
 
 Added task "Real paths" landed: aef35e1. All tasks, the batch and the added fix are in; Finish begins.
@@ -226,3 +228,22 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   to the simplify pass rather than a second fix round; why: comment-only,
   and the simplify pass reviews comments against the code anyway; cost
   if wrong: the comments land a pass later.
+- Ruling (Claude): the /perturb skill's body sentence on the lead rule
+  was corrected in its brief before it went out ("follows any command
+  but `cd`" became "follows any command in the same Bash call but a `cd`
+  joined to it by `&&`, `;` or a newline"); why: the guard as fixed
+  counts any other cd as an ordinary command; cost if wrong: one
+  sentence reworded.
+- Ruling (Claude): the batch's commit-scan test header keeps the two
+  phrases naming its new cases, beyond the brief's "words unchanged";
+  why: without them the header would go stale; cost if wrong: two
+  phrases deleted.
+- Ruling (Claude): simplify pass 1's four edits landed (two guard
+  comments, a test helper renamed from sh to git, and the charter
+  template's comment losing the history of when its line cap was
+  raised); why: each was proved a no-behaviour edit by a comparison and
+  the full verify was identical before and after; the template comment
+  is the one judgment call (setup strips it before an adopter sees it);
+  cost if wrong: the history clause restored.
+- For the owner: commands/handoff.md repeats "14 days" from
+  SHOWCASE_DAYS=14 in ground-truth.sh with no test tying them.
