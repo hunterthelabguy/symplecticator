@@ -10,14 +10,14 @@
 // stdin is not scanned), a git commit or push after any command but a cd bash keeps (top level, ended by &&, ; or a
 // newline) in the same call, a substitution's command included (the scan reads the repo before the call runs), a
 // push or commit where git cannot answer, and a call
-// with a quote or substitution left open. Before
-// every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file and the raw
+// with a quote or substitution left open. Paths compare in both their written and their real spelling (8.3 names,
+// junctions and symlinks resolved). Before every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file and the raw
 // command. It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
 //
 // Fails closed: input it cannot read and any error it throws exit 2, since Claude Code lets a hook's other exit
 // codes through.
 
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -59,10 +59,30 @@ function toPath(p, cwd) {
   if (WIN) s = s.replace(/^\/([a-zA-Z])(?:\/|$)/, '$1:/');
   return resolve(cwd, s);
 }
-// The same, in one spelling for comparison: forward slashes, lower case on Windows.
-function norm(p, cwd) {
-  const s = toPath(p, cwd).replace(/\\/g, '/');
-  return WIN ? s.toLowerCase() : s;
+// The real path of the longest part of s that exists, with the rest added back: 8.3 short names, junctions and
+// symlinks resolved, so every spelling of one file compares equal.
+function real(s) {
+  let head = s;
+  const rest = [];
+  for (;;) {
+    try { return join(realpathSync.native(head), ...rest); } catch {}
+    const up = dirname(head);
+    if (up === head) return s;
+    rest.unshift(basename(head));
+    head = up;
+  }
+}
+// A spelling in the one form paths compare in: forward slashes, lower case on Windows.
+function form(s) {
+  const f = s.replace(/\\/g, '/');
+  return WIN ? f.toLowerCase() : f;
+}
+// The same path in both spellings it compares in: as written (made absolute) and real. A path is protected when any
+// of its spellings meets any spelling of a rule: the real one alone would miss removing a folder that holds a link
+// to config, since the rule then names the link's target.
+function spellings(p, cwd) {
+  const s = toPath(p, cwd);
+  return [...new Set([form(s), form(real(s))])];
 }
 
 function git(cwd, ...args) {
@@ -79,26 +99,27 @@ const currentBranch = (repo) => short(git(repo, 'symbolic-ref', '-q', 'HEAD'));
 
 function protectedRules(cwd) {
   const rules = ['settings.json', 'settings.local.json', 'CLAUDE.md', 'PERSONAL-ADDENDUM.md', 'scan-patterns.local']
-    .map((f) => ({ path: norm(join(CLAUDE, f), cwd) }));
+    .map((f) => ({ paths: spellings(join(CLAUDE, f), cwd) }));
   for (const d of [join(CLAUDE, 'scripts'), join(CLAUDE, 'skills', 'perturb')]) {
-    rules.push({ path: norm(d, cwd), tree: true });
+    rules.push({ paths: spellings(d, cwd), tree: true });
   }
   // Every checkout of the working repo, the main one and each worktree.
   for (const line of git(cwd, 'worktree', 'list', '--porcelain').split('\n')) {
     if (!line.startsWith('worktree ')) continue;
-    for (const f of ['settings.json', 'settings.local.json']) rules.push({ path: norm(join(line.slice(9), '.claude', f), cwd) });
+    for (const f of ['settings.json', 'settings.local.json']) rules.push({ paths: spellings(join(line.slice(9), '.claude', f), cwd) });
   }
   return rules;
 }
 function isProtected(p, cwd, rules) {
-  const t = norm(p, cwd);
-  return rules.some((r) => t === r.path || (r.tree && t.startsWith(r.path + '/')));
+  const ts = spellings(p, cwd);
+  return rules.some((r) => r.paths.some((q) => ts.some((t) => t === q || (r.tree && t.startsWith(q + '/')))));
 }
 // Removing a folder removes what is under it; the root holds everything.
 function holdsProtected(p, cwd, rules) {
-  const t = norm(p, cwd);
-  const base = t.endsWith('/') ? t : t + '/';
-  return isProtected(p, cwd, rules) || rules.some((r) => r.path.startsWith(base));
+  return isProtected(p, cwd, rules) || spellings(p, cwd).some((t) => {
+    const base = t.endsWith('/') ? t : t + '/';
+    return rules.some((r) => r.paths.some((q) => q.startsWith(base)));
+  });
 }
 // A path with a glob: its literal parent, if protected, or a protected path under that parent whose next name the
 // first globbed name could match (a leading dot only by a leading dot, as bash expands it).
@@ -110,9 +131,10 @@ function globHits(p, cwd, rules) {
   if (isProtected(parent, cwd, rules)) return true;
   const body = name.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.').replace(/\[!/g, '[^');
   const re = new RegExp(`^${name.startsWith('.') ? '' : '(?!\\.)'}${body}$`, WIN ? 'i' : '');
-  const t = norm(parent, cwd);
-  const base = t.endsWith('/') ? t : t + '/';
-  return rules.some((r) => r.path.startsWith(base) && re.test(r.path.slice(base.length).split('/')[0]));
+  return spellings(parent, cwd).some((t) => {
+    const base = t.endsWith('/') ? t : t + '/';
+    return rules.some((r) => r.paths.some((q) => q.startsWith(base) && re.test(q.slice(base.length).split('/')[0])));
+  });
 }
 const hasGlob = (p) => /[*?[]/.test(p);
 
