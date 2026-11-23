@@ -322,7 +322,7 @@ test('init writes an unclassified row for every entry and a note in the header',
     ['`Design note`', '', 'unclassified', 'none', 'LEDGER.md', 'Design note'],
   ]);
   assert.equal(get(dir, 'LEDGER.md'), bullets.replace('Intro.\n\n', `Intro.\n\n${L.HEADER_NOTE.join('\n')}\n\n`));
-  // The note is the three lines the spec gives (section 7), typed out here and not read from the script.
+  // The note's exact three lines, typed out here and not read from the script, so a change to them fails.
   assert.deepEqual(L.HEADER_NOTE, [
     'Before writing a ruling, run `node ~/.claude/scripts/ledger.mjs next` and',
     "use the number it prints. Fill that ruling's row in `LEDGER_INDEX.md`",
