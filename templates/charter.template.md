@@ -2,8 +2,7 @@
 it fills each FILL IN (the title takes the adopter's name) from the
 interview, keeps only the adopted floor items and the optional parts the
 adopter chose, and removes every template comment. The result loads in every
-session, so it stays under about 130 lines (raised from about 120 on
-2026-11-21, when the conjugate pass and `/perturb` bullets came in). -->
+session, so it stays under about 130 lines. -->
 
 # Partnership charter: FILL IN (the owner's name) and Claude (user-global, every repo)
 
