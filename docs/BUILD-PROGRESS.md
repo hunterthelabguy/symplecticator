@@ -18,12 +18,12 @@ do not exist on the base; T1, T2 and T3 create them.
 | T3 /perturb skill and hook | done | 47a8c88 | full verify green: all five suites; hook 7 of 7, guard 23 of 23 |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
-| T6 setup, template, docs, CI | review | 2a165cd | five suites green; both greps empty |
+| T6 setup, template, docs, CI | fix round 1 | 2a165cd | review: checkboxes as given, five suites green; 1 Important (badge caption) |
 | Floor-9 batch | todo | | |
 
 ## Agents
 
-Spawned: 12. Resumed: 12.
+Spawned: 12. Resumed: 13.
 
 ## Rulings
 
@@ -158,3 +158,15 @@ Spawned: 12. Resumed: 12.
   hook's 30 s by PERTURB_SCAN_TIMEOUT_MS in the environment, and the hook
   suite reads only the literal default; `gh pr create` is refused by the
   skill's prose only (spec section 11 declines blocking it).
+- Ruling (Claude): the README's CI badge caption is corrected in the
+  docs task's fix round, though the plan's checklist omits it; why: the
+  workflow now runs five suites and a Windows job, and a caption naming
+  two would misstate the repo's verification; cost if wrong: one
+  reworded caption.
+- For the owner: nothing keeps `~/.claude/scan-patterns.local` out of
+  `~/.claude`'s own git (setup writes no ignore line), so a `git add -A`
+  there would track the private list; setup's step 10 check catches it
+  only when setup runs.
+- For the owner: the Windows CI job's guard suite runs commit-scan.sh
+  through whatever `bash` the runner's PATH resolves; if that is not Git
+  Bash, the job fails and is fixed in the pull request.
