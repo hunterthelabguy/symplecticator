@@ -15,7 +15,7 @@ do not exist on the base; T1, T2 and T3 create them.
 |---|---|---|---|
 | T1 commit-scan.sh | done | 445f9df (merge 2c873fc) | commit-scan all passed; 22 of 22 mutants killed; suites green after merge |
 | T2 perturb-guard.mjs | done | 97d0941 | full verify green on rerun (first run: 4 ground-truth fixture checks red, named flake); guard 23 of 23 |
-| T3 /perturb skill and hook | review | b2a1966 | hook suite 7 of 7, 0 skipped; 10 of 10 mutants as named |
+| T3 /perturb skill and hook | fix round 1 | b2a1966 | review: 10 of 10 named mutants killed; 1 Important (user-only check scope), 6 Minor |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
 | T6 setup, template, docs, CI | todo | | |
@@ -23,7 +23,7 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 10. Resumed: 8.
+Spawned: 10. Resumed: 9.
 
 ## Rulings
 
@@ -145,3 +145,16 @@ Spawned: 10. Resumed: 8.
   detail lines, so their cause is not known. Cost if wrong: a real
   regression in the ground-truth suite lands; CI on three systems
   reruns it.
+- Ruling (Claude): the skill's review findings go to one fix round,
+  Minor ones included: the user-only check scoped to the frontmatter;
+  the skill's body names the browser refusals (browser skill, batch
+  tool, scrolling), says "among others" before its refusal list, adds
+  fetching a page and reporting progress to the allowed kinds, and is
+  rewrapped; four body lines corrected; why: same two files, every
+  change measured by the review's probes of the guard, and none changes
+  the hooks block, the tool list or the guard; cost if wrong: a reworded
+  skill paragraph.
+- For the owner: the guard's scan timeout can be raised above the
+  hook's 30 s by PERTURB_SCAN_TIMEOUT_MS in the environment, and the hook
+  suite reads only the literal default; `gh pr create` is refused by the
+  skill's prose only (spec section 11 declines blocking it).
