@@ -23,9 +23,11 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 16. Resumed: 17.
+Spawned: 17. Resumed: 17.
 
 ## Notes
+
+Added task "Real paths" landed: aef35e1. All tasks, the batch and the added fix are in; Finish begins.
 
 Added task "Real paths": the pull request's first Windows CI run failed one guard test (an 8.3 short temp name against git's long path); a real gap, fixed at the root after a prototype.
 
@@ -215,3 +217,10 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   pins the 8.3 branch locally, since this disk makes short names; cost
   if wrong: a little more refusal where a written spelling and a real
   one both happen to match.
+- Ruling (Claude): the real-path fix lands by replay with its
+  re-check's corrected rm-of-a-link sentence; its two Minor comment
+  findings (a 148-column header line; real's comment claiming every
+  spelling compares equal, which dangling and hard links contradict) go
+  to the simplify pass rather than a second fix round; why: comment-only,
+  and the simplify pass reviews comments against the code anyway; cost
+  if wrong: the comments land a pass later.
