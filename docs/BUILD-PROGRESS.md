@@ -23,9 +23,11 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 18. Resumed: 17.
+Spawned: 21. Resumed: 18.
 
 ## Notes
+
+Clearing round 1 at 1abb851: not cleared (3 major). Fix landed as 7656713. The "for the owner" item above on the scan list having no ignore line is withdrawn: ~/.claude/.gitignore is a whitelist that ignores it.
 
 Simplify pass 2: clean, no commit; the loop ends after one landed pass.
 
@@ -247,3 +249,31 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   cost if wrong: the history clause restored.
 - For the owner: commands/handoff.md repeats "14 days" from
   SHOWCASE_DAYS=14 in ground-truth.sh with no test tying them.
+- Ruling (Claude): clearing round 1's two code majors go to one fix
+  round, prototyped first: cd's options (-L, -P, -e, -@, clusters, --)
+  are skipped before its folder, an invalid option leaves the folder
+  unchanged (bash moves nowhere), and `builtin` is stripped like
+  `command`; two readsHeredoc conditions get refused fixtures; why: the
+  prototype's neighbour probe found `builtin cd` passing by another
+  input and fixed it at the same root (how the guard reads a cd), with
+  every probed form matching bash; cost if wrong: a cd form the guard
+  now follows that bash would not.
+- Ruling (Claude): the false PR-body bullet (the scan list has no
+  ignore line in ~/.claude) is withdrawn from the body, the report and
+  the owner's list; ~/.claude/.gitignore is a whitelist that ignores it
+  (git check-ignore confirms), as spec section 3 says. The two minors
+  (git -c indirection, GNU cp -T) are added to the PR's known-miss list
+  without code changes; a nit's PR line was narrowed. Cost if wrong:
+  none; body edits are not commits.
+- Ruling (Claude): the clearing fix adds a test for an option cluster
+  (`cd -Pe <config> && rm CLAUDE.md` refused); why: the implementer's own
+  mutant (clusters not skipped) survived the briefed tests, a floor-9
+  gap; cost if wrong: one test line.
+- Owner ruling, 2026-11-23, in session, quoted: "run timed mutants four
+  at a time and if it works well, we'll make that the standard for
+  symplecticator workflow. Yes?" Claude answered yes, with a safeguard
+  (a timing-only kill is rerun alone before it counts) and two measures
+  of "works well": no verdict flips on a solo rerun, and the wall time
+  saved against one-at-a-time runs (about 90 s a mutant). Applies from
+  the clearing fix's re-check on; the running implementer keeps its
+  one-at-a-time runs.
