@@ -14,7 +14,7 @@ do not exist on the base; T1, T2 and T3 create them.
 | Task | State | Commit | Verify |
 |---|---|---|---|
 | T1 commit-scan.sh | done | 445f9df (merge 2c873fc) | commit-scan all passed; 22 of 22 mutants killed; suites green after merge |
-| T2 perturb-guard.mjs | fix round 1 | e3bb2da | review: 106 of 106 named mutants killed; 1 Important (cd rule), 5 Minor |
+| T2 perturb-guard.mjs | re-check | d664ead | 23 of 23; c1 to c7, X1 to X3 killed alone |
 | T3 /perturb skill and hook | todo | | |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
@@ -23,7 +23,7 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 8. Resumed: 6.
+Spawned: 8. Resumed: 8.
 
 ## Rulings
 
@@ -124,3 +124,10 @@ Spawned: 8. Resumed: 6.
 - For the owner: spec section 4 says `.claude/settings*.json`; the code
   protects exactly settings.json and settings.local.json, as the plan's
   global constraints list them. Confirm the spec meant those two.
+- Ruling (Claude): the guard's fix round takes the implementer's option
+  A over the controller's brief: two more refusals, a cd ended by ;
+  inside a substitution and inside parentheses; why: the brief failed as
+  written (its forms $(cd x) and (cd x) end at a closing parenthesis,
+  outside the keep set, so the substitution and parenthesis checks stood
+  untested and their mutants survived); option A kills both alone, suite
+  green; cost if wrong: none (two more refusal assertions).
