@@ -18,12 +18,12 @@ do not exist on the base; T1, T2 and T3 create them.
 | T3 /perturb skill and hook | done | 47a8c88 | full verify green: all five suites; hook 7 of 7, guard 23 of 23 |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
-| T6 setup, template, docs, CI | running | - | - |
+| T6 setup, template, docs, CI | review | 2a165cd | five suites green; both greps empty |
 | Floor-9 batch | todo | | |
 
 ## Agents
 
-Spawned: 11. Resumed: 12.
+Spawned: 12. Resumed: 12.
 
 ## Rulings
 
