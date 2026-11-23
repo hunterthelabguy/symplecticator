@@ -15,7 +15,7 @@ do not exist on the base; T1, T2 and T3 create them.
 |---|---|---|---|
 | T1 commit-scan.sh | done | 445f9df (merge 2c873fc) | commit-scan all passed; 22 of 22 mutants killed; suites green after merge |
 | T2 perturb-guard.mjs | done | 97d0941 | full verify green on rerun (first run: 4 ground-truth fixture checks red, named flake); guard 23 of 23 |
-| T3 /perturb skill and hook | fix round 1 | b2a1966 | review: 10 of 10 named mutants killed; 1 Important (user-only check scope), 6 Minor |
+| T3 /perturb skill and hook | re-check | 831f43b | hook suite 7 of 7; 11 of 11 mutants as named |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
 | T6 setup, template, docs, CI | todo | | |
@@ -23,7 +23,7 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 10. Resumed: 9.
+Spawned: 10. Resumed: 12.
 
 ## Rulings
 
