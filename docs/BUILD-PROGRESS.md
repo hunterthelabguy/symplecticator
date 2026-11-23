@@ -19,11 +19,11 @@ do not exist on the base; T1, T2 and T3 create them.
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
 | T6 setup, template, docs, CI | done | e012012 | full verify green: all five suites; both greps empty |
-| Floor-9 batch | review | 7f6ccd6 | X5, X7, |& mutant killed alone; no earlier kill lost; five suites green |
+| Floor-9 batch | done | a2965f5 | full verify green; body corrected at landing by replay (49655f7) |
 
 ## Agents
 
-Spawned: 16. Resumed: 13.
+Spawned: 16. Resumed: 14.
 
 ## Notes
 
@@ -201,3 +201,17 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   removal too, where removing the link alone would be harmless.
 - For the owner: a hard link to a protected file is a second name no
   path resolution can see; it stays a miss.
+- Ruling (Claude): the batch lands by replay with its reviewer's
+  corrected guard paragraph, without a re-check; why: the review's only
+  findings were in the commit body (one 110-character line, one sentence
+  wider than the guard), the tree is the reviewed one, and the corrected
+  paragraph was read back (every line at most 72, no barred word); cost
+  if wrong: one reworded body.
+- Ruling (Claude): the real-path fix compares both spellings, written
+  and real, in a fix round; why: its review probed a regression (with
+  ~/.claude a link, removing the home folder was refused before the fix
+  and allowed after it), and comparing both spellings keeps every
+  earlier refusal while adding the link and 8.3 ones; the round also
+  pins the 8.3 branch locally, since this disk makes short names; cost
+  if wrong: a little more refusal where a written spelling and a real
+  one both happen to match.
