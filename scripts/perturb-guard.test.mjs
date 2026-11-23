@@ -118,6 +118,7 @@ test('git -C and cd reach the right repo; a repo with no origin HEAD falls back 
   refused(bash('git push origin main', { cwd: OTHER }), 'main');
   refused(bash(`git -C "${REPO}" push origin trunk`, { cwd: OTHER }), 'trunk');
   refused(bash(`cd "${REPO}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
+  refused(bash(`cd -- "${REPO}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
   allowed(bash(`git -C "${REPO}" push origin feat`, { cwd: OTHER }));
   refused(bash('git -c core.x=y push origin trunk'), 'trunk');
   refused(bash('git --no-pager push origin trunk'), 'trunk');
@@ -222,6 +223,9 @@ test('commit or push after another command in the same call refused; after cd al
     'git commit -m "$(cat <<EOF\nsubject\nEOF\n)"']) refused(bash(c), 'stage in one call');
   // A heredoc read that also does anything else, here a redirection, is a command like any other.
   refused(bash('git commit -m "$(cat <<\'EOF\' 2>/dev/null\nsubject\nEOF\n)"'), 'after another command');
+  // Only cat reading the heredoc, inside a substitution, is exempt.
+  refused(bash('git commit -m "$(sh <<\'EOF\'\ngit add b.txt\nEOF\n)"'), 'after another command');
+  refused(bash('cat <<\'EOF\'\nnote\nEOF\ngit commit -m x'), 'after another command');
   // A cd bash throws away (in a substitution, in parentheses, or not ended by &&, ; or a newline) moves nothing
   // and is a command before the commit or push.
   writeFileSync(join(REPO, 'b.txt'), 'zanzibar\n');
@@ -320,6 +324,15 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   refused(bash('echo x >& ~/.claude/CLAUDE.md'), 'protected');
   refused(bash('echo x >| ~/.claude/CLAUDE.md'), 'protected');
   refused(bash('echo x > $HOME/.claude/CLAUDE.md'), 'protected');
+  // cd's options and -- are not its folder.
+  refused(bash(`cd -P "${C}" && rm CLAUDE.md`), 'protected');
+  refused(bash(`cd -L -P "${C}"; echo x > CLAUDE.md`), 'protected');
+  refused(bash(`cd -Pe "${C}" && rm CLAUDE.md`), 'protected');
+  refused(bash(`cd -- "${C}" && rm CLAUDE.md`), 'protected');
+  refused(bash(`builtin cd "${C}" && rm CLAUDE.md`), 'protected');
+  allowed(bash(`cd -P "${OTHER}" && rm CLAUDE.md`));
+  // After an invalid option bash moves nowhere, so the folder stays.
+  refused(bash(`cd -x "${OTHER}"; rm CLAUDE.md`, { cwd: C }), 'protected');
   refused(bash('echo x > ${HOME}/.claude/CLAUDE.md'), 'protected');
   refused(bash('echo x | tee ~/.claude/scripts/a.sh'), 'protected');
   refused(bash('cp a.txt ~/.claude/scripts/a.sh'), 'protected');
