@@ -23,9 +23,11 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 17. Resumed: 17.
+Spawned: 18. Resumed: 17.
 
 ## Notes
+
+Simplify pass 1 landed: 50c8088 (proposed 9, applied 4, left 5); full verify green. Pass 2 running.
 
 Added task "Real paths" landed: aef35e1. All tasks, the batch and the added fix are in; Finish begins.
 
