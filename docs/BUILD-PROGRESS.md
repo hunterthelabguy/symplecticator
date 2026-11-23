@@ -14,7 +14,7 @@ do not exist on the base; T1, T2 and T3 create them.
 | Task | State | Commit | Verify |
 |---|---|---|---|
 | T1 commit-scan.sh | done | 445f9df (merge 2c873fc) | commit-scan all passed; 22 of 22 mutants killed; suites green after merge |
-| T2 perturb-guard.mjs | re-check | d664ead | 23 of 23; c1 to c7, X1 to X3 killed alone |
+| T2 perturb-guard.mjs | done | 97d0941 | full verify green on rerun (first run: 4 ground-truth fixture checks red, named flake); guard 23 of 23 |
 | T3 /perturb skill and hook | todo | | |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
@@ -131,3 +131,17 @@ Spawned: 8. Resumed: 8.
   outside the keep set, so the substitution and parenthesis checks stood
   untested and their mutants survived); option A kills both alone, suite
   green; cost if wrong: none (two more refusal assertions).
+- Ruling (Claude): the guard's merge (97d0941) stands although its first
+  full verify was red; why: the only failures were four checks of the
+  ground-truth suite's deleted-object fixture ("pushed copy cannot be
+  compared: UNKNOWN", "verbatim check cannot run: UNKNOWN", "git cherry
+  failing partway: UNKNOWN", "every failed comparison counted"), a
+  script the merge does not touch; the same tree then passed the full
+  verify once and the ground-truth suite four times in a row; that area
+  of the suite has failed once before with no script change (the commit
+  that made a failed check print what it read). Named here as a known
+  flake: a later landing whose only red is these four checks reruns the
+  suite once before reverting. The landing script cut the failed checks'
+  detail lines, so their cause is not known. Cost if wrong: a real
+  regression in the ground-truth suite lands; CI on three systems
+  reruns it.
