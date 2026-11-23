@@ -23,7 +23,11 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 13. Resumed: 13.
+Spawned: 14. Resumed: 13.
+
+## Notes
+
+Added task "Real paths": the pull request's first Windows CI run failed one guard test (an 8.3 short temp name against git's long path); a real gap, fixed at the root after a prototype.
 
 ## Rulings
 
@@ -184,3 +188,16 @@ Spawned: 13. Resumed: 13.
   intent; why: the order is equivalent today (no test can pin it) and the
   comment states the reading a later change would need; cost if wrong:
   one comment line.
+- Ruling (Claude): the pull request's first Windows CI failure is fixed
+  at the root in the guard, as a task added in the build: the guard
+  compares real paths (8.3 short names, junctions and symlinks resolved
+  on the longest existing prefix); why: the failing assertion exposed a
+  real gap (from the repo's main checkout, a Write to the 8.3 spelling of
+  its .claude/settings.json exited 0 while the long spelling exited 2),
+  the plan says a Windows FAIL is fixed in the pull request, and a
+  prototype killed both the 8.3 and the junction forms with the guard
+  and hook suites green; a test-only fix would have hidden the gap; cost
+  if wrong: a symlink pointing into protected config is refused for
+  removal too, where removing the link alone would be harmless.
+- For the owner: a hard link to a protected file is a second name no
+  path resolution can see; it stays a miss.
