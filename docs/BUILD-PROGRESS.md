@@ -14,7 +14,7 @@ do not exist on the base; T1, T2 and T3 create them.
 | Task | State | Commit | Verify |
 |---|---|---|---|
 | T1 commit-scan.sh | done | 445f9df (merge 2c873fc) | commit-scan all passed; 22 of 22 mutants killed; suites green after merge |
-| T2 perturb-guard.mjs | review | e3bb2da | 23 of 23; 105 of 106 mutant runs as named |
+| T2 perturb-guard.mjs | fix round 1 | e3bb2da | review: 106 of 106 named mutants killed; 1 Important (cd rule), 5 Minor |
 | T3 /perturb skill and hook | todo | | |
 | T4 frames skill | done | aaa2522 (merge 2ad404b) | grep 10, no em dash; ground-truth and build-stop-gate green |
 | T5 showcase branches, ruling count | done | a42af3d (merge 26c15f2) | ground-truth all passed; 12 of 12 mutants killed; suites green after merge |
@@ -23,7 +23,7 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 8. Resumed: 5.
+Spawned: 8. Resumed: 6.
 
 ## Rulings
 
@@ -101,3 +101,26 @@ Spawned: 8. Resumed: 5.
   hits sorted lexically (line 10 before line 2); a stale local
   showcase branch standing for a newer pushed copy (the plan's
   interface).
+- Ruling (Claude): the guard's plan-mandated cd handling goes to a fix
+  round rather than parking: a cd moves the guard's cwd and counts as a
+  lead only where bash keeps it (top level, outside parentheses and
+  substitutions, ended by &&, ; or a newline); anywhere else it is an
+  ordinary command; why: spec section 4 refuses a commit or push after a
+  substitution that runs first, and spec beats plan; the fix narrows what
+  the guard allows and changes no refusal text, tool list or anchor; the
+  controller widened the review's fix to the neighbours it found by
+  reading the parser (a cd ended by |, || or a single &, which bash also
+  discards for the next command); cost if wrong: `(cd x && git commit)`
+  and those forms are refused where the plan let them through.
+- Ruling (Claude): the review's three Minor survivors (`>|`, `gh --repo
+  o/r` as two words, readsHeredoc's three-token condition) go into the
+  same fix round instead of the floor-9 batch; why: same two files,
+  test-first, and the round runs anyway; cost if wrong: none beyond the
+  round's tokens.
+- Ruling (Claude): a push with no refspec under push.default=upstream is
+  spec-compliant and stays as built, named as a miss in the commit body
+  and listed for the owner; why: spec section 4 asks only for "no refspec
+  while on it"; cost if wrong: a follow-up to resolve @{push}.
+- For the owner: spec section 4 says `.claude/settings*.json`; the code
+  protects exactly settings.json and settings.local.json, as the plan's
+  global constraints list them. Confirm the spec meant those two.
