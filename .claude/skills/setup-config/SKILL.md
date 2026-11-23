@@ -37,7 +37,9 @@ anything you write for them or into their files.
 - Nothing invented, and no FILL IN or template comment survives into the
   adopter's files.
 - Private values stay out: when the adopter names something they keep out of
-  tracked files, record the category, never the value.
+  tracked files, record the category, never the value. The one exception is
+  the untracked scan list `~/.claude/scan-patterns.local` (step 8.6), written
+  only on its own yes.
 - Copied files are copied unchanged. Read and write bytes, so line endings
   and encoding stay as they are.
 - Drafts (step 8) and the temporary file for the private-value check (step
@@ -55,6 +57,8 @@ Without asking, find out and report in a few lines:
 - `git config --global user.name` and `user.email`;
 - `git --version` (the ground-truth script needs 2.38 or later) and
   whether the GitHub CLI is installed and signed in (`gh auth status`);
+- `node --version`: `/perturb`'s guard runs on node, and without it every
+  tool call under `/perturb` is refused;
 - whether `~/.claude` is itself a git repo:
   `git -C ~/.claude rev-parse --show-prefix` succeeds and prints an empty
   line (a repo at a parent such as `~` does not count);
@@ -92,14 +96,18 @@ Skip the reading and the interview.
    `*-examples.md` files never enter replace or remove: the adopter's
    `/reflect` curates them, so report upstream changes only (a new one is an
    add). Paths under "Kept local" are skipped. `skills/build`,
-   `commands/handoff.md` and `scripts/` move together: `/build`'s Stop hook
-   and `/handoff` run those scripts, so never install either at a version
-   whose scripts are missing or kept at an older version. Changes in
-   `templates/` are reported, never applied: the charter and addendum
-   belong to the adopter now. Two exceptions are offered, each with a yes:
-   a new settings hook, merged as in step 8.5, and an `## Escapes` section
-   with its text from step 8.4, appended to an existing `COSTS.md` that
-   lacks one (`/reflect` logs escapes there).
+   `skills/perturb`, `commands/handoff.md` and `scripts/` move together:
+   `/build`'s Stop hook, `/perturb`'s guard and `/handoff` run those
+   scripts, so never install any of them at a version whose scripts are
+   missing or kept at an older version. Changes in `templates/` are
+   reported, never applied: the charter and addendum belong to the adopter
+   now. Three exceptions are offered, each with a yes: a new settings hook,
+   merged as in step 8.5; an `## Escapes` section with its text from step
+   8.4, appended to an existing `COSTS.md` that lacks one (`/reflect` logs
+   escapes there); and, when `~/.claude/scan-patterns.local` is absent, the
+   scan list: ask Round 1 item 6's separate question, and on a yes ask for
+   the values themselves (`update` skips the interview, so it has none in
+   hand), then draft the list as in step 8.6 and show it before writing.
 4. Show the groups, ask for a yes per group, back up, write, and update
    `setup-source.md`. With git, record the new commit. Without git, refresh
    the baseline: move `setup-backups/baseline/` into this run's backup
@@ -173,7 +181,10 @@ Ask in one batch, all optional except the first:
    recorded, in the third person ("<name>'s private full name"). If you want setup
    to check that none of these values ended up in your files, give each value
    once; it is used only for that check, from a temporary file deleted right
-   after.
+   after. Separately: `/perturb`'s commit scan needs these values on this
+   disk, in an untracked `~/.claude/scan-patterns.local`, to refuse commits
+   that contain them. Keep them there? Without the list, `/perturb` refuses
+   every commit.
 
 Round 1 answers are facts, not rulings: items 1 to 5 go into the charter,
 item 6 into the addendum, and none into the ledger.
@@ -330,12 +341,12 @@ Ask these in one batch, so every draft shown in step 9 is final:
 - For each settings key this setup would set that already exists with a
   different value: show old against new; the adopter picks.
 - For each collision in `skills/`, `commands/` or `scripts/`: replace (after
-  a backup) or keep theirs. `skills/build`, `commands/handoff.md` and
-  `scripts/` are replaced or kept together (see `update` mode). A kept one
-  goes on the addendum's "Kept local" list. For a kept skill or command,
-  name what in the charter, addendum or other skills refers to it, and
-  adjust or drop those lines in the drafts (for example, its line under
-  User-only skills).
+  a backup) or keep theirs. `skills/build`, `skills/perturb`,
+  `commands/handoff.md` and `scripts/` are replaced or kept together (see
+  `update` mode). A kept one goes on the addendum's "Kept local" list. For a
+  kept skill or command, name what in the charter, addendum or other skills
+  refers to it, and adjust or drop those lines in the drafts (for example,
+  its line under User-only skills).
 
 If none of these applies, say so and go on.
 
@@ -348,9 +359,10 @@ Build everything in the scratch location first (see the rules):
    1, 3, 4, 6, 7); never renumber, because the skills cite items by number.
    In Working protocol, drop the Coaching note, Pro-move gate or Cost gate
    bullet for any that are off; if the pro-move gate is off, also drop the
-   cost gate's last sentence. Always keep the Unattended-runs bullet, naming
-   only the gates that are on: it does nothing while overnight is off, and
-   `/build` needs it once overnight is turned on. The /handoff,
+   cost gate's last sentence; if the cost gate is off, end the `/perturb`
+   bullet at "it spawns no agents." Always keep the Unattended-runs bullet,
+   naming only the gates that are on: it does nothing while overnight is
+   off, and `/build` needs it once overnight is turned on. The /handoff,
    Delegated-work and focus-thread bullets always stay. Drop Review cadence
    clauses for gates that are off. Write Strengths in the third person, or
    drop the section if none were named. Drop Rulings if item 6 was declined.
@@ -406,11 +418,19 @@ Build everything in the scratch location first (see the rules):
    if they chose it, appended to any `SessionStart` hooks already there,
    never replacing one; `autoMode` only if they use auto mode. To fill an
    `autoMode` line, delete the `FILL IN:` marker or the `FILL IN (...)` text and substitute `<account>`, `<name>` and `<email>`.
-6. **Copy plan:** all of `skills/*` into `~/.claude/skills/`, `commands/*`
+6. **Scan list**, only if they said keep: `~/.claude/scan-patterns.local`,
+   one rule per line, `<label><TAB><regex>`, the label the category's
+   third-person name, the regex the value with regex characters escaped,
+   plus a home path rule when the login name was given. The file holds one
+   backslash pair per Windows separator; for the login `jdoe` the line is
+   `home path<TAB>(C:\\Users\\|/Users/|/home/)jdoe`, which matches
+   `C:\Users\jdoe`, its forward-slash form and `/home/jdoe` in any case.
+7. **Copy plan:** all of `skills/*` into `~/.claude/skills/`, `commands/*`
    into `~/.claude/commands/` and `scripts/*` into `~/.claude/scripts/`,
    minus the kept collisions.
-7. **Source record:** `~/.claude/setup-source.md` with the date, this
-   source's commit (or "no git"), and every installed path. Without git,
+8. **Source record:** `~/.claude/setup-source.md` with the date, this
+   source's commit (or "no git"), and every installed path
+   (`scan-patterns.local` among them, if written). Without git,
    also copy this source's `skills/`, `commands/`, `scripts/` and
    `templates/` to `~/.claude/setup-backups/baseline/` for `update` to compare against; it
    is raw source, so it holds template markers, and it is not the adopter's
@@ -419,9 +439,10 @@ Build everything in the scratch location first (see the rules):
 ## 9. Show, then write
 
 Show the charter and addendum in full, the ledger section, the costs log
-header, the settings change as a diff, the copy list, `setup-source.md`,
-and (without git) the baseline copy. Ask for one final yes, then write, and
-delete the drafts.
+header, the settings change as a diff, the copy list, the scan list (if
+they said keep; its values are the adopter's own and appear only in this
+session), `setup-source.md`, and (without git) the baseline copy. Ask for
+one final yes, then write, and delete the drafts.
 
 If writing the `autoMode` lines is refused, show the exact lines and ask the
 adopter to paste them into `settings.json` themselves.
@@ -449,12 +470,18 @@ is the pass, so say so to the adopter.
   or `Get-ChildItem -Recurse -File <written files>,"$env:USERPROFILE\.claude\skills","$env:USERPROFILE\.claude\commands","$env:USERPROFILE\.claude\scripts" | Select-String -SimpleMatch -Pattern (Get-Content <tmpfile>) -List`;
   delete the temporary file; report only the file names that matched, or
   "not found", never the values.
+- **Scan list**, if written, and only if `~/.claude` is itself a git
+  repository (`git -C ~/.claude rev-parse --show-prefix` succeeds and prints
+  an empty line, as in step 0): `bash ~/.claude/scripts/commit-scan.sh ~/.claude`
+  exits 0 (no tracked file holds a value); report the exit code only.
+  Otherwise say it was skipped: the No private values check covers the
+  installed files.
 - **Only skills under `skills/`:**
   `for d in ~/.claude/skills/*/; do test -f "$d/SKILL.md" || echo "no SKILL.md: $d"; done`,
   or `Get-ChildItem -Directory "$env:USERPROFILE\.claude\skills" | Where-Object { -not (Test-Path "$($_.FullName)\SKILL.md") }`;
   no top-level folder lacks one, and none is a backup.
 - **Line counts:** `wc -l ~/.claude/CLAUDE.md ~/.claude/PERSONAL-ADDENDUM.md`,
-  or `(Get-Content <file>).Count`; charter under about 120, addendum under
+  or `(Get-Content <file>).Count`; charter under about 130, addendum under
   about 50.
 - **Source record:** every path listed in `~/.claude/setup-source.md`
   exists, for example
@@ -488,8 +515,9 @@ Tell the adopter, briefly:
 - **Updating:** pull this repo, open it, and run `/setup-config update`. To
   change a habit or mode, edit the charter or addendum directly, or run full
   setup again (an existing ledger is appended to, never rewritten).
-- **Undo:** remove the paths listed in `~/.claude/setup-source.md`, and
-  restore anything setup replaced from `~/.claude/setup-backups/<date>/`.
+- **Undo:** remove the paths listed in `~/.claude/setup-source.md` (the scan
+  list among them, if written), and restore anything setup replaced from
+  `~/.claude/setup-backups/<date>/`.
 - **Optional extras** this setup does not install:
   - **Transcript copies.** Claude Code's cleanup deletes old transcripts. To
     keep them, copy `~/.claude/projects` somewhere now and then with a

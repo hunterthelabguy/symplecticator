@@ -1,8 +1,8 @@
 # The Symplecticator
 
 [![test](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml)
-(the scripts' two test suites on Ubuntu and macOS; the skills themselves are
-prose and have no tests)
+(the scripts' five test suites on Ubuntu and macOS, and the guard suite
+also on Windows; the skills themselves are prose and have no tests)
 
 A Claude Code configuration for anyone who writes code with Claude: the
 Symplecticator pipeline (below), plus the skills, commands and setup
@@ -92,7 +92,8 @@ Setup walks you through it, and you should read it yourself too.
 The scripts need bash (Git Bash on Windows, which Claude Code uses anyway),
 git 2.38 or later, and ssh for SSH remotes; their pull-request checks also
 need the GitHub CLI (`gh`), signed in. Setup checks git and `gh`, and runs
-the scripts' tests on your machine.
+the scripts' tests on your machine. `/perturb`'s guard also needs node;
+setup checks for it.
 
 Setup looks at your existing `~/.claude` first, goes through the primer,
 asks four short rounds of questions (any of them can be skipped), shows you
@@ -115,6 +116,9 @@ restore from `~/.claude/setup-backups/`, using the list in
   price, and charter edits only take effect in a new session anyway.
 - **The cost gate** (if you turned it on) asks before any step that spawns
   agents, because those cost far more than ordinary turns.
+- **`/perturb <direction>`** when you want to see how far an idea goes.
+  Claude works alone on a showcase branch you mine later in a fresh
+  session; to leave `/perturb`, start a new session.
 
 ## What you get
 
@@ -126,7 +130,9 @@ restore from `~/.claude/setup-backups/`, using the list in
 | `critique` | Hard critique of a document or non-code plan, then rounds of questions. |
 | `writing-plans` | Turns an approved spec into a task plan, then builds its first tasks in a scratch copy to find what reading misses (the executing critique). |
 | `/build` | Executes a plan as a task graph ending in a draft pull request, with a resume block for the next session in its body; `/build overnight` runs it unattended once enabled. |
-| Ground truth (`scripts/`) | `ground-truth.sh` prints what is true in your repos right now, read from git and GitHub: pushed or not, merged or not, open pull requests with their CI and clearing-review verdicts. `/handoff` writes its block from it, and the next session runs it first. `/build`'s Stop hook and the optional resume hook rely on the same facts. |
+| `/perturb` | Works with wide latitude toward an ambitious result on a showcase branch you mine; a hook lets through only the tools it can check and refuses default-branch and force pushes, merges, config writes, agents and the other shells. Needs node. |
+| `frames` | Generators and checks for the 0 to 2 bets that end a task's report. |
+| Ground truth (`scripts/`) | `ground-truth.sh` prints what is true in your repos right now, read from git and GitHub: pushed or not, merged or not, open pull requests with their CI and clearing-review verdicts. `/handoff` writes its block from it, and the next session runs it first. `/build`'s Stop hook and the optional resume hook rely on the same facts. `commit-scan.sh` refuses a `/perturb` commit that holds a value from your untracked scan list. |
 | `tdd` | Test-first reference: where tests go, anti-patterns, how thick tests should be. |
 | `diagnosing-bugs` | A feedback-loop-first method for hard bugs. |
 | `verification-before-completion` | No claim of "done" or "passing" without a fresh run. |
