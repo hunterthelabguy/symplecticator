@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 //
 // perturb-guard.mjs: the PreToolUse hook /perturb registers from its frontmatter, for every tool, active from
-// invocation to the end of that session. It lets through a named list of safe tools and refuses every other tool,
-// MCP tools included (exit 2, reason on stderr). Of the safe tools, Edit, MultiEdit, Write and NotebookEdit are
-// refused on a protected path, Skill runs only frames, the browser's computer tool only takes screenshots, and Bash
-// is parsed: it refuses pushes to the default branch,
-// force pushes, --all, --mirror, glob refspecs and push options it does not know, gh pr merge, deleting a remote
-// branch outside showcase/, writes to or removal of the owner's protected config, git commit -F - (a message from
-// stdin is not scanned), a git commit or push after any command but a cd bash keeps (top level, ended by &&, ; or a
-// newline) in the same call, a substitution's command included (the scan reads the repo before the call runs), a
-// push or commit where git cannot answer, and a call
-// with a quote or substitution left open. Paths compare in both their written and their real spelling (8.3 names,
-// junctions and symlinks resolved). Before every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file and the raw
-// command. It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
+// invocation to the end of that session. It lets through a named list of safe tools and refuses every other tool, MCP
+// tools included (exit 2, reason on stderr). Of the safe tools, Edit, MultiEdit, Write and NotebookEdit are refused
+// on a protected path, Skill runs only frames, the browser's computer tool only takes screenshots, and Bash is
+// parsed: it refuses pushes to the default branch, force pushes, --all, --mirror, glob refspecs and push options it
+// does not know, gh pr merge, deleting a remote branch outside showcase/, writes to or removal of the owner's
+// protected config, git commit -F - (a message from stdin is not scanned), a git commit or push after any command but
+// a cd bash keeps (top level, ended by &&, ; or a newline) in the same call, a substitution's command included (the
+// scan reads the repo before the call runs), a push or commit where git cannot answer, and a call with a quote or
+// substitution left open. Paths compare in both their written and their real spelling (8.3 names, junctions and
+// symlinks resolved). Before every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F
+// file and the raw command. It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
 //
 // Fails closed: input it cannot read and any error it throws exit 2, since Claude Code lets a hook's other exit
 // codes through.
@@ -60,7 +59,7 @@ function toPath(p, cwd) {
   return resolve(cwd, s);
 }
 // The real path of the longest part of s that exists, with the rest added back: 8.3 short names, junctions and
-// symlinks resolved, so every spelling of one file compares equal.
+// symlinks resolved, so those spellings of one file compare equal.
 function real(s) {
   let head = s;
   const rest = [];

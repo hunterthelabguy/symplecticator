@@ -22,24 +22,24 @@ const TMP = join(T, 'tmp');
 mkdirSync(TMP);
 const env = { ...process.env, HOME, USERPROFILE: HOME, TMPDIR: TMP, TEMP: TMP, TMP, GIT_AUTHOR_NAME: 't',
   GIT_AUTHOR_EMAIL: 't', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't' };
-const sh = (cwd, ...args) => {
+const git = (cwd, ...args) => {
   const r = spawnSync('git', args, { cwd, env, encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`);
 };
 
 mkdirSync(join(HOME, '.claude'), { recursive: true });
 writeFileSync(join(HOME, '.claude', 'scan-patterns.local'), 'legal name\tzanzibar\nhome folder\thome-qzx\n');
-sh(T, 'init', '-q', '--bare', 'origin.git');
-sh(T, 'init', '-q', 'repo');
-sh(REPO, 'symbolic-ref', 'HEAD', 'refs/heads/trunk');
+git(T, 'init', '-q', '--bare', 'origin.git');
+git(T, 'init', '-q', 'repo');
+git(REPO, 'symbolic-ref', 'HEAD', 'refs/heads/trunk');
 writeFileSync(join(REPO, 'a.txt'), 'clean\n');
-sh(REPO, 'add', 'a.txt');
-sh(REPO, 'commit', '-qm', 'first');
-sh(REPO, 'remote', 'add', 'origin', join(T, 'origin.git'));
-sh(REPO, 'push', '-q', 'origin', 'trunk');
-sh(REPO, 'remote', 'set-head', 'origin', 'trunk');
-sh(REPO, 'worktree', 'add', '-q', '-b', 'showcase/2026-11-20-x', WT);
-sh(T, 'init', '-q', 'other');
+git(REPO, 'add', 'a.txt');
+git(REPO, 'commit', '-qm', 'first');
+git(REPO, 'remote', 'add', 'origin', join(T, 'origin.git'));
+git(REPO, 'push', '-q', 'origin', 'trunk');
+git(REPO, 'remote', 'set-head', 'origin', 'trunk');
+git(REPO, 'worktree', 'add', '-q', '-b', 'showcase/2026-11-20-x', WT);
+git(T, 'init', '-q', 'other');
 
 function run(tool, input, { cwd = REPO, raw, guard = GUARD, extraEnv = {} } = {}) {
   const stdin = raw ?? JSON.stringify({ session_id: 's', cwd, tool_name: tool, tool_input: input });
@@ -55,8 +55,8 @@ const refused = (r, text) => {
 };
 const allowed = (r) => assert.equal(r.code, 0, r.err);
 const onFeat = (fn) => {
-  sh(REPO, 'checkout', '-q', '-b', 'feat');
-  try { fn(); } finally { sh(REPO, 'checkout', '-q', 'trunk'); sh(REPO, 'branch', '-q', '-D', 'feat'); }
+  git(REPO, 'checkout', '-q', '-b', 'feat');
+  try { fn(); } finally { git(REPO, 'checkout', '-q', 'trunk'); git(REPO, 'branch', '-q', '-D', 'feat'); }
 };
 const C = join(HOME, '.claude');
 
@@ -205,9 +205,9 @@ test('commit: scan clean allowed, scan hit refused (tracked file and every messa
   writeFileSync(join(HOME, 'clean-msg.txt'), 'subject\n\nclean\n');
   allowed(bash(`git commit -F "${join(HOME, 'clean-msg.txt')}"`));
   writeFileSync(join(REPO, 'b.txt'), 'zanzibar\n');
-  sh(REPO, 'add', 'b.txt');
+  git(REPO, 'add', 'b.txt');
   refused(bash('git commit -m clean'), 'zanzibar');
-  sh(REPO, 'rm', '-q', '--cached', 'b.txt');
+  git(REPO, 'rm', '-q', '--cached', 'b.txt');
   rmSync(join(REPO, 'b.txt'));
   assert.deepEqual(readdirSync(TMP), []);
 });
@@ -225,11 +225,11 @@ test('commit or push after another command in the same call refused; after cd al
   // A cd bash throws away (in a substitution, in parentheses, or not ended by &&, ; or a newline) moves nothing
   // and is a command before the commit or push.
   writeFileSync(join(REPO, 'b.txt'), 'zanzibar\n');
-  sh(REPO, 'add', 'b.txt');
+  git(REPO, 'add', 'b.txt');
   try {
     refused(bash(`git commit -m "fix $(cd "${WT}")"`), 'after another command');
     refused(bash(`git commit -m "fix $(cd "${WT}";)"`), 'after another command');
-  } finally { sh(REPO, 'rm', '-q', '--cached', 'b.txt'); rmSync(join(REPO, 'b.txt')); }
+  } finally { git(REPO, 'rm', '-q', '--cached', 'b.txt'); rmSync(join(REPO, 'b.txt')); }
   for (const c of [`git push origin trunk $(cd "${OTHER}")`, `(cd "${OTHER}"); git push origin trunk`,
     `(cd "${OTHER}";); git push origin trunk`,
     `cd "${OTHER}" | git push origin trunk`, `cd "${OTHER}" |& git push origin trunk`, `cd "${OTHER}" & git commit -m x`,
