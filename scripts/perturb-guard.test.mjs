@@ -232,7 +232,7 @@ test('commit or push after another command in the same call refused; after cd al
   } finally { sh(REPO, 'rm', '-q', '--cached', 'b.txt'); rmSync(join(REPO, 'b.txt')); }
   for (const c of [`git push origin trunk $(cd "${OTHER}")`, `(cd "${OTHER}"); git push origin trunk`,
     `(cd "${OTHER}";); git push origin trunk`,
-    `cd "${OTHER}" | git push origin trunk`, `cd "${OTHER}" & git commit -m x`,
+    `cd "${OTHER}" | git push origin trunk`, `cd "${OTHER}" |& git push origin trunk`, `cd "${OTHER}" & git commit -m x`,
     `cd "${OTHER}" || git push origin trunk`]) refused(bash(c), 'after another command');
   allowed(bash(`cd "${REPO}" && git commit -m clean`, { cwd: OTHER }));
   allowed(bash(`cd "${REPO}" && git push origin feat`, { cwd: OTHER }));

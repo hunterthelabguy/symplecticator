@@ -342,7 +342,8 @@ fi
 
 # Showcase branches: with only one inside 14 days, no header; a local one past 14 days is listed with its age, once
 # though it is also pushed, as is a pushed one no local branch holds; one inside 14 days is not, nor is an old branch
-# outside showcase/, local or pushed.
+# outside showcase/, local or pushed. At the edge, one 14 and a half days old is listed and one 13 and a half days
+# old is not; a branch named exactly showcase, local or pushed, is not listed either (in a repo of its own, below).
 git_q init -q --bare "$T/show-origin.git"
 git_q init -q "$T/show" && (
   cd "$T/show" || exit 1
