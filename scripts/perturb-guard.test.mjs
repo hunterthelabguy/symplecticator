@@ -5,7 +5,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, realpathSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, realpathSync, rmSync, readdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -281,8 +281,13 @@ test('Edit and Write: repo files allowed, protected paths refused in every spell
   refused(run('Write', { file_path: join(WT, '.claude', 'settings.json') }), 'protected');
   refused(run('Write', { file_path: join(REPO, '.claude', 'settings.local.json') }, { cwd: WT }), 'protected');
   allowed(run('Write', { file_path: join(REPO, '.claude', 'skills', 'x.md') }));
+  // A link to the config folder is another spelling of it.
+  symlinkSync(C, join(T, 'link-c'), 'junction');
+  refused(run('Write', { file_path: join(T, 'link-c', 'settings.json') }), 'protected');
+  refused(bash(`rm -f "${join(T, 'link-c', 'CLAUDE.md')}"`), 'protected');
+  allowed(run('Write', { file_path: join(T, 'link-c', 'LEDGER.md') }));
 });
-test('Windows spellings: /c/ form and other case refused', { skip: process.platform !== 'win32' }, () => {
+test('Windows spellings: /c/ form and other case refused', { skip: process.platform !== 'win32' }, (t) => {
   const slash = C.replace(/^([A-Za-z]):/, (m, d) => `/${d.toLowerCase()}`).replace(/\\/g, '/');
   refused(run('Write', { file_path: `${slash}/settings.json` }), 'protected');
   refused(run('Write', { file_path: join(C.toUpperCase(), 'SETTINGS.JSON') }), 'protected');
@@ -293,6 +298,17 @@ test('Windows spellings: /c/ form and other case refused', { skip: process.platf
   writeFileSync(join(HOME, 'clean-msg.txt'), 'subject\n\nclean\n');
   allowed(bash(`git commit -F "${slash.replace(/\/\.claude$/, '')}/clean-msg.txt"`));
   allowed(bash(`git commit -F "${HOME.toUpperCase()}\\clean-msg.txt"`));
+  // The 8.3 short spelling, where the disk makes one: asked short with HOME long, and asked long with HOME short.
+  const r = spawnSync('cmd', ['/d', '/s', '/c', `"for %I in ("${C}") do @echo %~sI"`], { encoding: 'utf8', windowsVerbatimArguments: true });
+  assert.equal(r.status, 0, r.stderr);
+  const shortC = r.stdout.trim();
+  if (shortC.toLowerCase() === C.toLowerCase()) {
+    t.diagnostic('no 8.3 short name on this disk: the short-spelling assertions did not run');
+    return;
+  }
+  const shortHome = { extraEnv: { HOME: dirname(shortC), USERPROFILE: dirname(shortC) } };
+  refused(run('Write', { file_path: join(shortC, 'settings.json') }), 'protected');
+  refused(run('Write', { file_path: join(C, 'settings.json') }, shortHome), 'protected');
 });
 test('Bash writes and removals in protected paths refused; the same elsewhere allowed', () => {
   refused(bash(`echo x > "${join(C, 'settings.json')}"`), 'protected');
@@ -328,6 +344,15 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   refused(bash('rm -rf ~/.cl*'), 'protected');
   refused(bash('rm -rf ~/.claude/scripts/*'), 'protected');
   refused(bash(`mv ~/.claude/CLAUDE.md "${join(T, 'x')}"`), 'protected');
+  // A home whose .claude is a link to config kept elsewhere: removing the home removes what the link names.
+  const HOME2 = join(T, 'home2'), DOT = join(T, 'dotfiles', 'claude');
+  mkdirSync(DOT, { recursive: true });
+  writeFileSync(join(DOT, 'settings.json'), '{}');
+  mkdirSync(HOME2);
+  symlinkSync(DOT, join(HOME2, '.claude'), 'junction');
+  const home2 = { extraEnv: { HOME: HOME2, USERPROFILE: HOME2 } };
+  refused(bash(`rm -rf "${HOME2}"`, home2), 'protected');
+  refused(bash(`rm -rf ${HOME2.replace(/\\/g, '/')}/.c*`, home2), 'protected');
   allowed(bash(`echo x > "${join(T, 'free.txt')}"`));
   allowed(bash('echo x 2>&1'));
   allowed(bash('cp a.txt b.txt'));
