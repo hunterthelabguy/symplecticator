@@ -27,7 +27,7 @@ Spawned: 23. Resumed: 20.
 
 ## Notes
 
-Fix round after the run (a fresh session, 2026-11-23): A, B and C fixed in one change, test first, after the owner's two rulings on its scope (below); landed as 32217aa; full verify green, guard 24 of 24; 19 of 19 fix mutants killed at eight at once (k7 after one test line), no scan timeout. A fresh clearing review follows.
+Fix round after the run (a fresh session, 2026-11-23 to 24): A, B and C fixed in one change, test first, after the owner's two rulings on its scope (below); landed as 32217aa; full verify green, guard 24 of 24; 19 of 19 fix mutants killed at eight at once (k7 after one test line), no scan timeout. A fresh clearing review follows.
 
 Clearing round 3 at 257bac3 (the last allowed): not cleared, 3 major. The run ends uncleared; the PR body, the report and the resume block carry the findings.
 
@@ -382,6 +382,30 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   Node 18.13 or later and the guard needs Node too, and its badge
   caption counts six suites; why: each side's sentence was true of its
   side only; cost if wrong: a reworded line.
+- Owner ruling, 2026-11-24, after clearing round 5 (not cleared at
+  4a8b355: a cd in a list ended by &, or in a piped or backgrounded
+  group, moved the guard): asked "What next?" (Claude-drafted), the
+  owner picked "Keep every folder (Recommended)": "Land the 4-line rule
+  test first. The 2 tests that allowed `cd /other; rm CLAUDE.md` from
+  the config folder flip to refused, and the new forms get tests. The
+  over-refusal goes on the known list. Then verify, mutants and CI."
+  Cost gate for round 6's review: "Lighter" (a delta review of the
+  commits since 4a8b355, with round 5's report as context).
+- Ruling (Claude): within that pick, each cd's folder is resolved from
+  every folder seen, not only the placed one, and three conditions that
+  became dead go (`else placing = false`, and the kept-cd and not-placed
+  tests in placement, whose mutants survived as equivalent: placing
+  matters only to a push or commit, which any command but a kept cd
+  refuses); why: the four-line prototype let
+  `cd <other> && true & cd cd-sub; rm ../CLAUDE.md` through from the
+  config folder (probed: exit 0, bash removed the file), and after any
+  other command a push or commit is refused anyway; cost if wrong: a
+  few more over-refusals of the kind the owner accepted.
+- Ruling (Claude): tests that now pass only because the starting folder
+  stays checked are folded into one list of the forms the clearing
+  rounds found, and the pins that matter only for a push (a `{ }`
+  group, `command` and `time`, a reserved word) move onto push tests;
+  why: floor 9; cost if wrong: a form's line reads less directly.
 - Ruling (Claude): the owner's two rulings went into the private ledger
   as their own entries, committed that file alone and not pushed, since
   that checkout holds other sessions' unpushed commits; cost if wrong:

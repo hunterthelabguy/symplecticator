@@ -23,7 +23,8 @@ Every plan task landed; none was parked.
 | Clearing fix 2: the guard follows only a cd bash takes | 56d2b68 | 0d0bd61 | 22 named mutants at eight at once: 21 killed, k4 killed after its pin; full verify green |
 | Fix round after the run: every folder a cd may leave | 32217aa (direct, fresh session) | 32217aa | 19 named mutants at eight at once: 18 killed, k7 killed after one test line; no scan timeout; full verify green |
 | Clearing round 4's fixes: a wrapped cd moves nothing, a conditional cd adds | 3024f72 (direct) | 3024f72 | 8 named mutants at eight at once: 8 killed, no scan timeout; guard and hook suites green |
-| Merge of main (the ledger script, the one-text port) | c84f450 | c84f450 | full verify of six suites (see Final verify) |
+| Merge of main (the ledger script, the one-text port) | c84f450 | c84f450 | full verify of six suites, 581 s; CI green |
+| Clearing round 5's fix: writes checked in every folder a cd names | 2b7a132 (direct) | 2b7a132 | 33 named mutants at eight at once: 31 killed, 2 equivalent with their code removed; no scan timeout; full verify green |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -62,7 +63,7 @@ cannot place. A fresh session then fixed round 3's three majors and,
 on your rulings, that held finding; a fresh clearing review reads the
 result.
 
-## Final verify (at c84f450, the merge of main; later commits touch only docs)
+## Final verify (the tree committed as 2b7a132; later commits touch only docs)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
@@ -73,8 +74,9 @@ perturb-guard.test.mjs: tests 24, pass 24, fail 0, skipped 0
 perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 ```
 
-581 s wall. CI at c84f450: suites on ubuntu-latest and macos-latest,
-and guard-windows, all success. CI at aef35e1 and every first-parent
+448 s wall. CI at c84f450, the merge before it: suites on ubuntu-latest
+and macos-latest, and guard-windows, all success; for later heads, see
+the PR's checks. CI at aef35e1 and every first-parent
 head after it through 5a8fc6e passed too; none ran at 32217aa, f9178c3
 or 3024f72, while the branch conflicted with main.
 
@@ -94,13 +96,12 @@ or 3024f72, while the branch conflicted with main.
 
 - **A cd the guard cannot place** (after a pipe, `false &&` or
   `true ||`): answered in the fix round after the run, by your ruling on
-  how a cd is placed (see Clearing review). Its cost is over-refusal:
-  after a cd the guard cannot place, a later write or removal is checked
-  in the old folder and in the cd's folder alike, though bash runs it in
-  one. Probed, each refused while bash leaves the config file alone:
-  `ls; cd /other; rm CLAUDE.md` and
-  `if cd /other; then cd sub; fi; rm CLAUDE.md` from the config folder,
-  and `(cd <config>) && rm CLAUDE.md` from another folder.
+  how a cd is placed, and then by keeping every folder (see Clearing
+  review). Its cost is over-refusal: a write or removal is checked in
+  the starting folder and in every folder a cd names, though bash runs
+  it in one. Probed, each refused while bash leaves the config file
+  alone: `cd /other; rm CLAUDE.md` from the config folder, and
+  `(cd <config>) && rm CLAUDE.md` from another folder.
 - **Spec section 4's settings line** says `.claude/settings*.json`; the
   guard protects exactly `settings.json` and `settings.local.json`, as the
   plan lists them. Confirm.
@@ -221,6 +222,25 @@ over-refusal, probed: `if cd <other>; then cd sub; fi; rm CLAUDE.md`
 from the config folder. c84f450 merges main; the three conflicts keep
 both sides, and the verify line and the workflow gain main's ledger
 suite.
+
+Round 5 at 4a8b355, a fresh full review: not cleared, 0 blocker, 2
+major, 3 minor. Round 4's blocker closed. The majors, rerun in the
+session: a `cd` joined by `&&` in a list that ends in `&`, and a `cd`
+in a piped or backgrounded `{ }` group, moved the guard though bash
+runs them in a throwaway shell (`cd <other> && true & rm CLAUDE.md`
+from the config folder removed the file). It was the fifth round
+running to find one more way the guard believed bash moved when it did
+not. You ruled the rule that closes the class ("Keep every folder
+(Recommended)", Claude-drafted): writes and removals are checked in the
+starting folder and in every folder any `cd` names, resolved from every
+folder seen; a push or commit keeps the placement above. And a lighter
+review after ("Lighter": a delta review of the commits since 4a8b355,
+with round 5's report as context). Its cost: from a folder that holds a
+protected name, removing that name after a real `cd` away is refused.
+The minors: `function f { ... }; f`, `coproc` and `stdbuf` join the
+known misses, with CDPATH, glob operands, a quoted `~` and a folder an
+earlier command creates or moves, which the PR body had named without
+listing.
 
 ## Trial: timed mutants four at a time
 
