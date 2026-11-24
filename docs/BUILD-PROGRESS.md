@@ -23,9 +23,11 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 21. Resumed: 18.
+Spawned: 22. Resumed: 21.
 
 ## Notes
+
+Clearing round 2 at ae46512: not cleared (1 major). Fix landed as 56d2b68 on the owner ruling; clearing round 3 reviews it.
 
 Clearing round 1 at 1abb851: not cleared (3 major). Fix landed as 7656713. The "for the owner" item above on the scan list having no ignore line is withdrawn: ~/.claude/.gitignore is a whitelist that ignores it.
 
@@ -277,3 +279,29 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   saved against one-at-a-time runs (about 90 s a mutant). Applies from
   the clearing fix's re-check on; the running implementer keeps its
   one-at-a-time runs.
+- Owner ruling, 2026-11-23, in session: on clearing round 2's N1 (the
+  guard follows a cd that bash refuses), asked "How should the fix go?"
+  (question and option text Claude-drafted), the owner picked "Validate
+  the cd (Recommended)", whose description read: "Follow a cd only when
+  bash would move: options -L, -P, -e only (drop -@), exactly one
+  operand, and an existing folder at check time; otherwise keep the old
+  folder. Closes every N1 probe with little risk to round 3. The pipe
+  and conditional forms stay held for you, as listed."
+- Ruling (Claude): within that pick, a cd joined by && still moves the
+  guard's folder to its target even when the target does not exist;
+  why: if the cd fails nothing after && runs, so following it is
+  harmless, and it keeps the existing "cd to a missing folder && push"
+  refusal; cost if wrong: a refusal message names the wrong reason.
+- Owner ruling, 2026-11-23, in session, quoted: "yes, take 1 and 2",
+  answering Claude's offer (Claude-drafted): "1. Fold the fix's task
+  review into clearing round 3 ... one fresh agent does both jobs" and
+  "2. More mutants at once ... Six to eight at once ... Same safeguard:
+  solo rerun on any timeout." Applies to the rest of this run: clearing
+  fix round 2 lands on its implementer's verify and the clearing
+  review, with no separate task review; mutants run up to eight at
+  once.
+- Ruling (Claude): the fix's surviving invalid-option branch gets a pin
+  (a folder named `-x` in the config folder; `cd -x; rm CLAUDE.md` is
+  refused), not deletion; why: the branch is right (bash rejects the
+  option and stays, so the removal hits the config folder) and only the
+  test was missing; cost if wrong: one test line and a fixture folder.

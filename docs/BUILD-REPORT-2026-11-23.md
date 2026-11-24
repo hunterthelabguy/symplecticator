@@ -20,6 +20,7 @@ Every plan task landed; none was parked.
 | Added: the guard compares real paths | aef35e1 | e7a77bd (replay of 3726301, body corrected) | 15 of 15 mutants killed; full verify green |
 | Simplify pass 1 | 50c8088 | 9d21343 | every check identical before and after; full verify green |
 | Clearing fix 1: the guard reads cd's options | 7656713 | replay of 2ad91b6 (body corrected) | every named mutant killed; full verify green |
+| Clearing fix 2: the guard follows only a cd bash takes | 56d2b68 | 0d0bd61 | 23 mutants killed at eight at once, the one survivor pinned; full verify green |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -55,7 +56,7 @@ unknown: the landing script cut the failed checks' detail lines.
 Nothing parked. One finding was held back from the batch for the owner
 (below): a cd the guard cannot place.
 
-## Final verify (at 7656713; later commits touch only docs)
+## Final verify (at 56d2b68; later commits touch only docs)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
@@ -121,11 +122,11 @@ ubuntu-latest and macos-latest, and guard-windows, all success.
   you wanted it kept.
 - **The frames skill's** "(offered)" headings are plan text, left as
   written.
-- **From the clearing fix's review:** a bare `cd` (to the home folder) is
-  not followed, the same class as the listed `cd -`; two option forms are
-  handled but unpinned (`-@`, and a cluster with a bad letter such as
-  `-Px`); the comment above `cdTarget` says "any other word starting
-  with -", wider than the code, which treats a lone `-` as the folder.
+- **A bare `cd`** (to the home folder) is not followed, the same class
+  as the listed `cd -`.
+- **A known over-refusal:** `mkdir -p x; cd x; rm CLAUDE.md` from the
+  config folder is refused, since `x` does not exist when the guard
+  checks.
 
 ## Clearing review
 
@@ -137,7 +138,18 @@ the heredoc exception survived the suite), 2 minor (git `-c`
 indirection and GNU `cp -T`, now on the known-miss list), 2 nit. The
 false item is withdrawn; the fix round landed as 7656713 and also
 strips `builtin` like `command` (found by probing the fix's
-neighbours). Round 2: see the PR body.
+neighbours).
+
+Round 2 at ae46512: round 1's majors confirmed closed; not cleared on
+one new major: the guard followed a `cd` that bash refuses (`-@`, a
+missing folder, a file, two operands), so after `;` or a newline the
+next command ran in a folder the guard did not check. The owner ruled
+the fix in session, picking "Validate the cd (Recommended)" from
+Claude-drafted options: follow a cd only when bash would move. Landed
+as 56d2b68. On the owner's further word ("yes, take 1 and 2"), that
+fix had no separate task review: clearing round 3 reviews it with the
+whole diff, and mutants run up to eight at once. Round 3: see the PR
+body.
 
 ## Trial: timed mutants four at a time
 
@@ -152,7 +164,10 @@ unmutated suite, run beside three mutants, took 149 s and stayed 23 of
 23. For contrast, one one-at-a-time run earlier did hit the timeout
 once (mutant c2), killed correctly on its rerun. Machine load during a
 one-at-a-time run was about 30% CPU of 10 cores and 3% disk: the suite
-is bound by process start-up, not compute.
+is bound by process start-up, not compute. At eight at once (clearing
+fix 2), 23 runs took 732 s wall, about 32 s a mutant, again with no
+timeout. One reviewer, while waiting on its batch, spawned a throwaway
+agent against its brief; it reviewed nothing.
 
 ## Retro line
 
