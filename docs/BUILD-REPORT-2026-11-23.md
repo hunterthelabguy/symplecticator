@@ -22,6 +22,8 @@ Every plan task landed; none was parked.
 | Clearing fix 1: the guard reads cd's options | 7656713 | replay of 2ad91b6 (body corrected) | every named mutant killed; full verify green |
 | Clearing fix 2: the guard follows only a cd bash takes | 56d2b68 | 0d0bd61 | 22 named mutants at eight at once: 21 killed, k4 killed after its pin; full verify green |
 | Fix round after the run: every folder a cd may leave | 32217aa (direct, fresh session) | 32217aa | 19 named mutants at eight at once: 18 killed, k7 killed after one test line; no scan timeout; full verify green |
+| Clearing round 4's fixes: a wrapped cd moves nothing, a conditional cd adds | 3024f72 (direct) | 3024f72 | 8 named mutants at eight at once: 8 killed, no scan timeout; guard and hook suites green |
+| Merge of main (the ledger script, the one-text port) | c84f450 | c84f450 | full verify of six suites (see Final verify) |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -60,23 +62,21 @@ cannot place. A fresh session then fixed round 3's three majors and,
 on your rulings, that held finding; a fresh clearing review reads the
 result.
 
-## Final verify (the fix round's tree, committed as 32217aa)
+## Final verify (at c84f450, the merge of main; later commits touch only docs)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
 build-stop-gate.test.sh: all checks passed, 0 skipped
+ledger.test.mjs: tests 56, pass 56, fail 0, skipped 0
 commit-scan.test.sh: commit-scan.test.sh: all passed
-perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 perturb-guard.test.mjs: tests 24, pass 24, fail 0, skipped 0
+perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 ```
 
-425 s wall. One guard test line changed after that run (a `cd ..` added
-to kill mutant k7); the guard suite was rerun on the committed tree, 24
-of 24.
-
-CI at aef35e1 and every first-parent head after it through 257bac3:
-suites on ubuntu-latest and macos-latest, and guard-windows, all success.
-For the fix round's head, see the PR's checks.
+581 s wall. CI at c84f450: suites on ubuntu-latest and macos-latest,
+and guard-windows, all success. CI at aef35e1 and every first-parent
+head after it through 5a8fc6e passed too; none ran at 32217aa, f9178c3
+or 3024f72, while the branch conflicted with main.
 
 ## Unverified
 
@@ -98,8 +98,9 @@ For the fix round's head, see the PR's checks.
   after a cd the guard cannot place, a later write or removal is checked
   in the old folder and in the cd's folder alike, though bash runs it in
   one. Probed, each refused while bash leaves the config file alone:
-  `ls; cd /other; rm CLAUDE.md` from the config folder, and
-  `(cd <config>) && rm CLAUDE.md` from another folder.
+  `ls; cd /other; rm CLAUDE.md` and
+  `if cd /other; then cd sub; fi; rm CLAUDE.md` from the config folder,
+  and `(cd <config>) && rm CLAUDE.md` from another folder.
 - **Spec section 4's settings line** says `.claude/settings*.json`; the
   guard protects exactly `settings.json` and `settings.local.json`, as the
   plan lists them. Confirm.
@@ -200,6 +201,26 @@ ended by `|` or `&`, adds its folder. Every probe was rerun against
 real bash in a throwaway home folder. This also answers the held forms
 (a `cd` after a pipe, `false &&` or `true ||`). The comment and the
 lone-dash sentence now say what the guard does.
+
+Round 4 at f9178c3, a fresh review after the build: not cleared, 1
+blocker, 2 major, 4 minor, 4 nit. The blocker: the branch conflicted
+with main, so CI had not run at the fix round's head. The majors, both
+rerun in the session against real bash: a `cd` behind `nohup`, `env`,
+`nice` or `timeout` counted as a `cd` bash keeps, though those run it
+as a program of its own and bash never moves (from the config folder
+`nohup cd <other>; rm CLAUDE.md` removed the file; present since the
+guard landed); and a `cd` in an `else`, `elif` or `do` body, or after a
+negated condition, counted as placed when the condition was a `cd` that
+moved (`if ! cd <config>; then cd <other>; fi; rm CLAUDE.md` and four
+like it). You ruled both fixed and main merged ("Fix both, merge main
+(Recommended)", Claude-drafted), and a fresh full review after
+("Run"). 3024f72 makes a wrapped `cd` move nothing and count as another
+command (`command`, `builtin` and `time` still run the builtin), and
+makes a `cd` behind a reserved word but `{` add its folder. Its one new
+over-refusal, probed: `if cd <other>; then cd sub; fi; rm CLAUDE.md`
+from the config folder. c84f450 merges main; the three conflicts keep
+both sides, and the verify line and the workflow gain main's ledger
+suite.
 
 ## Trial: timed mutants four at a time
 

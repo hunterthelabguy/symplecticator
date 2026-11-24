@@ -364,6 +364,24 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   copy after `cd <config> || exit`, and `(cd x) || cd y`; why: floor 9,
   each pins a line the brief's tests leave open; cost if wrong: four
   lines.
+- Owner ruling, 2026-11-23, after clearing round 4 (not cleared at
+  f9178c3: the branch conflicted with main; a wrapped cd and a cd behind
+  a reserved word were misplaced): asked "What goes into the next
+  round?" (Claude-drafted), the owner picked "Fix both, merge main
+  (Recommended)": "Land the prototype test-first, then merge main into
+  the branch with a merge commit, never a rebase. Resolving the
+  conflicts takes main's ledger suite into the verify line and the
+  workflow. Then full verify, CI on the merged head, and mutants." Cost
+  gate for the next clearing review: "Run".
+- Ruling (Claude): within that pick, `command`, `builtin` and `time`
+  still let a cd move, and a `{` group still places it; why: each runs
+  the builtin in the current shell, unconditionally; cost if wrong: a
+  form behind one of them that bash skips gets through, the class
+  round 4 found.
+- Ruling (Claude): the merge's README line says the ledger script needs
+  Node 18.13 or later and the guard needs Node too, and its badge
+  caption counts six suites; why: each side's sentence was true of its
+  side only; cost if wrong: a reworded line.
 - Ruling (Claude): the owner's two rulings went into the private ledger
   as their own entries, committed that file alone and not pushed, since
   that checkout holds other sessions' unpushed commits; cost if wrong:
