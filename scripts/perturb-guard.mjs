@@ -6,12 +6,13 @@
 // on a protected path, Skill runs only frames, the browser's computer tool only takes screenshots, and Bash is
 // parsed: it refuses pushes to the default branch, force pushes, --all, --mirror, glob refspecs and push options it
 // does not know, gh pr merge, deleting a remote branch outside showcase/, writes to or removal of the owner's
-// protected config, git commit -F - (a message from stdin is not scanned), a git commit or push after any command but
-// a cd bash keeps (top level, ended by &&, ; or a newline) in the same call, a substitution's command included (the
-// scan reads the repo before the call runs), a push or commit where git cannot answer, and a call with a quote or
-// substitution left open. Paths compare in both their written and their real spelling (8.3 names, junctions and
-// symlinks resolved). Before every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F
-// file and the raw command. It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
+// protected config (checked in every folder a cd may have left bash in), git commit -F - (a message from stdin is not
+// scanned), a git commit or push after any command but a cd bash keeps (top level, ended by &&, ; or a newline) in
+// the same call, a substitution's command included (the scan reads the repo before the call runs), a push or commit
+// after a cd the guard cannot place or where git cannot answer, and a call with a quote or substitution left open.
+// Paths compare in both their written and their real spelling (8.3 names, junctions and symlinks resolved). Before
+// every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file and the raw command.
+// It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
 //
 // Fails closed: input it cannot read and any error it throws exit 2, since Claude Code lets a hook's other exit
 // codes through.
@@ -429,13 +430,13 @@ function checkCommit(rest, repo, command) {
 }
 
 // A cd bash keeps for the commands after it: top level (in no substitution and no parentheses) and ended by &&, ;,
-// a newline or the end of the command. Any other cd is an ordinary command: it moves nothing, and a commit or push
-// after it is refused.
+// a newline or the end of the command. Any other cd is an ordinary command, so a commit or push after it is refused.
 const KEEPS = new Set(['&&', ';', '\n', 'end']);
 const keepsCd = (toks) => !toks.sub && !toks.paren && KEEPS.has(toks.sep);
 // The folder a cd names: its options (-L, -P, -e and clusters of them) and a -- skipped. Any other word of two or
 // more characters starting with - is an invalid option, and two operands are too many; after either bash moves
-// nowhere, so the folder stays. A bare cd (home) and a lone - (the previous folder) are not followed.
+// nowhere, so the folder stays. A bare cd (home) is not followed; a lone - (bash's previous folder) is read as a
+// folder named -, so it moves the folder only where one exists.
 function cdTarget(rest) {
   let i = 0;
   while (/^-[LPe]+$/.test(rest[i] ?? '')) i++;
@@ -445,29 +446,38 @@ function cdTarget(rest) {
 }
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
-function bash(command, cwd) {
-  const rules = protectedRules(cwd);
-  let other = false;
+// The folders each command may run in, every one checked. A cd bash keeps, while every command before it in the call
+// was a cd that moved, moves each folder to its target where that is a folder. Any other cd, but one ended by | or &
+// (which runs in a shell bash throws away), adds its targets: ended by ||, in parentheses or a substitution, or after
+// any other command, bash may have run it or not, and moved or not.
+function bash(command, start) {
+  const rules = protectedRules(start);
+  let cwds = [start];
+  let other = false, placing = true;
+  const anyHit = (check, t) => cwds.some((c) => check(t, c, rules));
   for (const toks of segments(command)) {
     if (readsHeredoc(toks)) continue;
     const { writes, removes, fills } = targets(toks);
     for (const t of writes) {
-      if (hasGlob(t) ? globHits(t, cwd, rules) : isProtected(t, cwd, rules)) refuse(`a write to ${t}`, 'it is protected config under /perturb');
+      if (anyHit(hasGlob(t) ? globHits : isProtected, t)) refuse(`a write to ${t}`, 'it is protected config under /perturb');
     }
     for (const t of removes) {
-      if (hasGlob(t) ? globHits(t, cwd, rules) : holdsProtected(t, cwd, rules)) refuse(`removing ${t}`, 'it is or holds protected config under /perturb');
+      if (anyHit(hasGlob(t) ? globHits : holdsProtected, t)) refuse(`removing ${t}`, 'it is or holds protected config under /perturb');
     }
     for (const t of fills) {
-      if (hasGlob(t) ? globHits(t, cwd, rules) : holdsProtected(t, cwd, rules)) refuse(`a recursive copy to ${t}`, 'it is or holds protected config under /perturb');
+      if (anyHit(hasGlob(t) ? globHits : holdsProtected, t)) refuse(`a recursive copy to ${t}`, 'it is or holds protected config under /perturb');
     }
     const [cmd, ...rest] = words(toks);
-    // After a cd joined by &&, nothing runs if it fails; after ; or a newline the next command runs where bash
-    // stayed, so the folder moves only to one that exists.
-    if (cmd === 'cd' && keepsCd(toks)) {
+    if (cmd === 'cd' && toks.sep !== '|' && toks.sep !== '&') {
       const d = cdTarget(rest);
-      if (d && (toks.sep === '&&' || isDir(toPath(d, cwd)))) cwd = toPath(d, cwd);
-      continue;
-    }
+      const moved = cwds.map((c) => (d && isDir(toPath(d, c)) ? toPath(d, c) : c));
+      // While placing there is one folder, cwds[0].
+      const placed = placing && keepsCd(toks);
+      if (!placed || !(d && isDir(toPath(d, cwds[0])))) placing = false;
+      cwds = [...new Set(placed ? moved : [...cwds, ...moved])];
+      if (keepsCd(toks)) continue;
+    } else placing = false;
+    const [cwd] = cwds;
     if (cmd === 'gh') {
       const g = rest.filter((a, i) => !/^(-R|--repo)$/.test(a) && !/^(-R|--repo)$/.test(rest[i - 1] ?? '') && !/^(-R.|--repo=)/.test(a));
       if (g[0] === 'pr' && g[1] === 'merge') refuse('gh pr merge', "merges are the owner's");
@@ -477,6 +487,8 @@ function bash(command, cwd) {
       const repo = dir ? toPath(dir, cwd) : cwd;
       if (sub === 'push' || sub === 'commit') {
         if (other) refuse(`git ${sub} after another command`, `the checks read the repo before the call runs; stage in one call, then run git ${sub} in the next, alone or after cd, with no substitution but $(cat <<'EOF' ...) for a message`);
+        // With no other command before it, more than one folder means a cd after a cd that did not move.
+        if (cwds.length > 1) refuse(`git ${sub} after a cd the guard cannot place`, `it could run in any of ${cwds.length} folders; run it alone, or after cds to folders that exist`);
         if (!git(repo, 'rev-parse', '--git-dir')) refuse(`git ${sub} in ${repo}`, 'git cannot answer there, so the guard cannot check it');
       }
       if (sub === 'push') checkPush(args, repo);

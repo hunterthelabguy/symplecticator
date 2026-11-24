@@ -128,7 +128,7 @@ test('git -C and cd reach the right repo; a repo with no origin HEAD falls back 
 test('push or commit where git cannot answer refused', () => {
   const nowhere = join(T, 'no-such-folder');
   refused(bash('git push origin feat', { cwd: nowhere }), 'cannot answer');
-  refused(bash(`cd "${nowhere}" && git push origin feat`), 'cannot answer');
+  refused(bash(`cd "${nowhere}" && git push origin feat`, { cwd: T }), 'cannot answer');
   refused(bash(`git -C "${nowhere}" commit -m clean`), 'cannot answer');
 });
 test('prefixes, wrappers and env assignments before git are skipped', () => {
@@ -388,6 +388,41 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   allowed(bash('rm -f *.log ~/.claude/*.bak'));
   allowed(bash('rm -f *'));
   allowed(bash('cat ~/.claude/settings.json'));
+});
+test('a cd moves the folder only after cds that moved; any other cd adds its folder to those checked', () => {
+  const missing = join(T, 'no-such-folder');
+  mkdirSync(join(C, 'cd-sub'));
+  mkdirSync(join(REPO, 'sub'));
+  try {
+    // A relative operand names a folder under the one the cd runs in.
+    refused(bash('cd cd-sub; rm ../CLAUDE.md', { cwd: C }), 'protected');
+    // After && too, a cd to a folder that does not exist moves nothing.
+    refused(bash(`cd "${missing}" && true; rm CLAUDE.md`, { cwd: C }), 'protected');
+    allowed(bash(`cd "${OTHER}" && true; rm CLAUDE.md`, { cwd: C }));
+    // Ended by ||, in parentheses or a substitution, or after another command, bash may or may not have moved.
+    refused(bash(`cd "${C}" || exit; rm CLAUDE.md`), 'protected');
+    refused(bash(`cd "${C}" || exit; echo x > settings.json`), 'protected');
+    refused(bash(`cd "${C}" || exit; cp -r skills .`), 'protected');
+    refused(bash(`cd "${OTHER}" || exit; rm CLAUDE.md`, { cwd: C }), 'protected');
+    allowed(bash(`cd "${OTHER}" || exit; rm CLAUDE.md`));
+    refused(bash(`(cd "${C}" && rm CLAUDE.md)`), 'protected');
+    refused(bash(`echo "$(cd "${C}"; rm CLAUDE.md)"`), 'protected');
+    allowed(bash(`(cd "${OTHER}" && rm CLAUDE.md)`));
+    for (const c of [`true | cd "${OTHER}"; rm CLAUDE.md`, `false && cd "${OTHER}"; rm CLAUDE.md`,
+      `true || cd "${OTHER}"; rm CLAUDE.md`, `if false; then cd "${OTHER}"; fi; rm CLAUDE.md`,
+      `cd "${missing}" && cd "${OTHER}"; rm CLAUDE.md`, `(cd "${OTHER}") || cd "${REPO}"; rm CLAUDE.md`]) {
+      refused(bash(c, { cwd: C }), 'protected');
+    }
+    // A cd ended by | or & runs in a shell bash throws away.
+    allowed(bash(`cd "${C}" | true; rm CLAUDE.md`));
+    allowed(bash(`cd "${C}" & rm CLAUDE.md`));
+    // A push or commit goes ahead only where the guard knows its one folder.
+    allowed(bash(`cd "${REPO}" && cd sub && cd .. && git push origin feat`, { cwd: OTHER }));
+    refused(bash(`cd "${missing}" && cd "${REPO}" && git push origin feat`, { cwd: OTHER }), 'cannot place');
+  } finally {
+    rmSync(join(C, 'cd-sub'), { recursive: true });
+    rmSync(join(REPO, 'sub'), { recursive: true });
+  }
 });
 test('only the safe tools pass: Agent, Workflow, the other shells, auto-merge, session tools and the rest refused', () => {
   for (const t of ['Agent', 'Task', 'Workflow', 'PowerShell', 'Monitor', 'mcp__terminal__run_in_terminal',
