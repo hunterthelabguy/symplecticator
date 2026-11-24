@@ -21,6 +21,7 @@ Every plan task landed; none was parked.
 | Simplify pass 1 | 50c8088 | 9d21343 | every check identical before and after; full verify green |
 | Clearing fix 1: the guard reads cd's options | 7656713 | replay of 2ad91b6 (body corrected) | every named mutant killed; full verify green |
 | Clearing fix 2: the guard follows only a cd bash takes | 56d2b68 | 0d0bd61 | 22 named mutants at eight at once: 21 killed, k4 killed after its pin; full verify green |
+| Fix round after the run: every folder a cd may leave | 32217aa (direct, fresh session) | 32217aa | 19 named mutants at eight at once: 18 killed, k7 killed after one test line; no scan timeout; full verify green |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -53,21 +54,29 @@ unknown: the landing script cut the failed checks' detail lines.
 
 ## Not cleared
 
-The run ends uncleared: see Clearing review below. Nothing was parked. One finding was held back from the batch for the owner
-(below): a cd the guard cannot place.
+The run ended uncleared: see Clearing review below. Nothing was parked.
+One finding was held back from the batch for the owner: a cd the guard
+cannot place. A fresh session then fixed round 3's three majors and,
+on your rulings, that held finding; a fresh clearing review reads the
+result.
 
-## Final verify (at 56d2b68; later commits touch only docs)
+## Final verify (the fix round's tree, committed as 32217aa)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
 build-stop-gate.test.sh: all checks passed, 0 skipped
 commit-scan.test.sh: commit-scan.test.sh: all passed
 perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
-perturb-guard.test.mjs: tests 23, pass 23, fail 0, skipped 0
+perturb-guard.test.mjs: tests 24, pass 24, fail 0, skipped 0
 ```
+
+425 s wall. One guard test line changed after that run (a `cd ..` added
+to kill mutant k7); the guard suite was rerun on the committed tree, 24
+of 24.
 
 CI at aef35e1 and every first-parent head after it through 257bac3:
 suites on ubuntu-latest and macos-latest, and guard-windows, all success.
+For the fix round's head, see the PR's checks.
 
 ## Unverified
 
@@ -83,13 +92,14 @@ suites on ubuntu-latest and macos-latest, and guard-windows, all success.
 
 ## For the owner
 
-- **A cd the guard cannot place.** A `cd` after a pipe, or after a
-  conditional (`false && cd /`, `true || cd /`), is followed by the guard
-  though bash discards or skips it. From the home config folder,
-  `true | cd /; rm CLAUDE.md`, `false && cd /; rm CLAUDE.md` and
-  `true || cd /; rm CLAUDE.md` all exit 0 while bash removes the protected
-  file. A pipe-only fix was prototyped (suite green) and held back: the
-  conditional forms need a decision at the root.
+- **A cd the guard cannot place** (after a pipe, `false &&` or
+  `true ||`): answered in the fix round after the run, by your ruling on
+  how a cd is placed (see Clearing review). Its cost is over-refusal:
+  after a cd the guard cannot place, a later write or removal is checked
+  in the old folder and in the cd's folder alike, though bash runs it in
+  one. Probed, each refused while bash leaves the config file alone:
+  `ls; cd /other; rm CLAUDE.md` from the config folder, and
+  `(cd <config>) && rm CLAUDE.md` from another folder.
 - **Spec section 4's settings line** says `.claude/settings*.json`; the
   guard protects exactly `settings.json` and `settings.local.json`, as the
   plan lists them. Confirm.
@@ -168,6 +178,28 @@ named `-`; and CDPATH, a glob operand, a quoted `~` and a folder moved
 earlier in the same call all resolve differently in bash. The fixes,
 with the round-3 reviewer's suggested tests, are in the resume block of
 the PR body.
+
+### Fix round after the run
+
+A fresh session fixed A, B and C in one change, test first. The B
+prototype (check both folders after a `cd` ended by `||`) closed every
+A and B probe, but probing its neighbours found the same fault by
+another input: a `cd` inside parentheses or a substitution, then a
+removal in the same subshell (`(cd <config> && rm CLAUDE.md)`,
+`echo "$(cd <config>; rm CLAUDE.md)"` and five more), exits 0 while bash
+removes the file. You ruled the broad rule ("Broad rule (Recommended)",
+Claude-drafted): any `cd` the guard cannot place adds its folder to the
+ones checked, and a push or commit with two possible folders is
+refused. Probing that rule as drafted found seven more forms (a `cd` in
+the body of `if false; then`, `case`, `for`, `while`, `else`, an
+uncalled function, or after `(false) &&`); you ruled the stricter
+definition ("Stricter (Recommended)", Claude-drafted): a `cd` moves the
+guard's folder only while every command before it in the call was a
+`cd` that moved to an existing folder, and any other `cd`, but one
+ended by `|` or `&`, adds its folder. Every probe was rerun against
+real bash in a throwaway home folder. This also answers the held forms
+(a `cd` after a pipe, `false &&` or `true ||`). The comment and the
+lone-dash sentence now say what the guard does.
 
 ## Trial: timed mutants four at a time
 

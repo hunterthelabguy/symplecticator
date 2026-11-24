@@ -27,6 +27,8 @@ Spawned: 23. Resumed: 20.
 
 ## Notes
 
+Fix round after the run (a fresh session, 2026-11-23): A, B and C fixed in one change, test first, after the owner's two rulings on its scope (below); landed as 32217aa; full verify green, guard 24 of 24; 19 of 19 fix mutants killed at eight at once (k7 after one test line), no scan timeout. A fresh clearing review follows.
+
 Clearing round 3 at 257bac3 (the last allowed): not cleared, 3 major. The run ends uncleared; the PR body, the report and the resume block carry the findings.
 
 Clearing round 2 at ae46512: not cleared (1 major). Fix landed as 56d2b68 on the owner ruling; clearing round 3 reviews it.
@@ -319,3 +321,50 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
 - Ruling (Claude): the run ends uncleared after clearing round 3, the
   third and last round the build allows, with its findings carried into
   the PR body, the report and the resume block for the next session.
+
+### Fix round after the run (fresh session)
+
+- Owner ruling, 2026-11-23, after the run: on finding B, asked "Should a
+  cd ended by || make the guard check both folders?" (Claude-drafted),
+  the owner chose "Check both folders".
+- Owner ruling, 2026-11-23, in the fix round: the B prototype closed
+  every A and B probe, but its neighbour probe found the same fault by
+  another input (a cd inside parentheses or a substitution, then a
+  removal in the same subshell: 7 forms, exit 0 while bash removes the
+  file). Asked "How far should this fix go?" (question and option text
+  Claude-drafted), the owner picked "Broad rule (Recommended)": "Any cd
+  the guard cannot place (in parentheses or a substitution, ended by ||,
+  after a pipe, && or ||) adds its folder to the ones checked; a commit
+  or push with two possible folders is refused. A cd after && counts as
+  placed when the command before it was a cd to an existing folder, so
+  `cd repo && cd sub && git push` still passes. This also answers the
+  held forms. 31 lines."
+- Owner ruling, 2026-11-23, in the fix round: probing that rule as
+  drafted found 7 more forms (a cd in the body of `if false; then`,
+  `case`, `for`, `while`, `else`, an uncalled function, or after
+  `(false) &&`). Asked "Which definition of a placed cd?" (Claude-drafted),
+  the owner picked "Stricter (Recommended)": "A cd moves the folder only
+  while everything before it in the call was a cd that moved to an
+  existing folder; any other cd (except one ended by | or &, which bash
+  throws away) adds its folder. Closes the 7 compound forms. 4 more
+  over-refusals, all from a folder that holds protected config."
+- Ruling (Claude): the lone-dash sentence is corrected to say what the
+  code does (a lone `-` is read as a folder named `-`), not the code to
+  match the old sentence; why: the brief asked for the sentence, and
+  `cd -` stays on the known-miss list either way; cost if wrong: `cd -`
+  moves the guard only where a folder named `-` exists.
+- Ruling (Claude): the new refusal reads "git push after a cd the guard
+  cannot place: it could run in any of N folders; run it alone, or
+  after cds to folders that exist"; why: the owner's pick says such a
+  push or commit is refused but not in what words; cost if wrong: a
+  reworded message.
+- Ruling (Claude): four test lines beyond the brief's list, each to
+  kill a mutant of this change: the old folder stays checked after
+  `cd <other> || exit` from the config folder, a write and a recursive
+  copy after `cd <config> || exit`, and `(cd x) || cd y`; why: floor 9,
+  each pins a line the brief's tests leave open; cost if wrong: four
+  lines.
+- Ruling (Claude): the owner's two rulings went into the private ledger
+  as their own entries, committed that file alone and not pushed, since
+  that checkout holds other sessions' unpushed commits; cost if wrong:
+  the owner pushes them with the rest.
