@@ -59,6 +59,8 @@ const onFeat = (fn) => {
   try { fn(); } finally { git(REPO, 'checkout', '-q', 'trunk'); git(REPO, 'branch', '-q', '-D', 'feat'); }
 };
 const C = join(HOME, '.claude');
+// A link to the config folder, another spelling of it, made here so any test using it can run alone.
+symlinkSync(C, join(T, 'link-c'), 'junction');
 
 test('push: feature branch allowed, default branch refused', () => {
   allowed(bash('git push origin feat'));
@@ -287,8 +289,7 @@ test('Edit and Write: repo files allowed, protected paths refused in every spell
   refused(run('Write', { file_path: join(WT, '.claude', 'settings.json') }), 'protected');
   refused(run('Write', { file_path: join(REPO, '.claude', 'settings.local.json') }, { cwd: WT }), 'protected');
   allowed(run('Write', { file_path: join(REPO, '.claude', 'skills', 'x.md') }));
-  // A link to the config folder is another spelling of it.
-  symlinkSync(C, join(T, 'link-c'), 'junction');
+  // The link to the config folder is another spelling of it.
   refused(run('Write', { file_path: join(T, 'link-c', 'settings.json') }), 'protected');
   refused(bash(`rm -f "${join(T, 'link-c', 'CLAUDE.md')}"`), 'protected');
   allowed(run('Write', { file_path: join(T, 'link-c', 'LEDGER.md') }));

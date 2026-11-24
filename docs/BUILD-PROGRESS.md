@@ -27,6 +27,8 @@ Spawned: 23. Resumed: 20.
 
 ## Notes
 
+Clearing round 10 at 8743947: cleared (1 minor); PR #13 merged as b52a04b on the owner's word. A follow-up pull request fixes the minor and records the round.
+
 Fix round after the run (a fresh session, 2026-11-23 to 24): A, B and C fixed in one change, test first, after the owner's two rulings on its scope (below); landed as 32217aa; full verify green, guard 24 of 24; 19 of 19 fix mutants killed at eight at once (k7 after one test line), no scan timeout. A fresh clearing review follows.
 
 Clearing round 3 at 257bac3 (the last allowed): not cleared, 3 major. The run ends uncleared; the PR body, the report and the resume block carry the findings.
