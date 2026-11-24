@@ -305,12 +305,15 @@ test('Windows spellings: /c/ form and other case refused', { skip: process.platf
   const slashRepo = REPO.replace(/^([A-Za-z]):/, (m, d) => `/${d.toLowerCase()}`).replace(/\\/g, '/');
   refused(bash(`cd "/proc/cygdrive${slashRepo}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
   refused(bash(`rm "/proc/cygdrive${slash}/CLAUDE.mx" "/proc/cygdrive${slash}/CLAUDE.md"`), 'protected');
-  // /tmp alone is a mount path too: the user's temp folder, where this suite's folders are made.
+  // /tmp alone is a mount path too: the temp folder, where this suite's folders are made. Git Bash reads /tmp from
+  // TEMP when no msys process holds it already, so the guard gets this process's TEMP, the one asked here.
   const unixC = spawnSync('bash', ['-c', 'cygpath -u -- "$1"', 'cygpath', C], { encoding: 'utf8' }).stdout.trim();
-  if (unixC.startsWith('/tmp/')) refused(bash(`cd /tmp && rm ${unixC.slice(5)}/CLAUDE.md`, { cwd: C }), 'protected');
+  const ownTemp = { extraEnv: { TEMP: process.env.TEMP, TMP: process.env.TMP } };
+  if (unixC.startsWith('/tmp/')) refused(bash(`cd /tmp && rm ${unixC.slice(5)}/CLAUDE.md`, { cwd: C, ...ownTemp }), 'protected');
   else t.diagnostic(`the config folder is not under /tmp here (${unixC}): the /tmp assertion did not run`);
   // A Write or Edit reads a drive-less path on the current drive, as Claude Code does.
   refused(run('Write', { file_path: C.slice(2).replace(/\\/g, '/') + '/CLAUDE.md' }), 'protected');
+  refused(run('Write', { file_path: join(T, 'link-c', 'settings.json').slice(2).replace(/\\/g, '/') }), 'protected');
   // With no bash to ask, a mount path stays as written, as before mount paths were read (a known miss; the hook
   // itself runs under bash).
   const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === 'path');

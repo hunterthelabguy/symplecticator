@@ -56,7 +56,7 @@ const LOOKS = new Set(['screenshot', 'zoom']);
 // A path as the shell meant it: ~, $HOME and ${HOME} expanded, Git Bash's /c/... read as C:/... on Windows (and
 // /c alone as C:/, not the current folder on C:), its other mount paths (/tmp/..., /proc/cygdrive/...) read through
 // its own cygpath unless asked for a Windows tool's reading (on the current drive), made absolute. / alone stays as
-// written, read as the drive's root: removing it reaches every drive through the /c mounts.
+// written, read as the drive's root, the wider of its two readings.
 function toPath(p, cwd, mounts = true) {
   let s = String(p).replace(/^(~|\$HOME|\$\{HOME\})(?=$|[\\/])/, () => HOME);
   if (WIN) s = s.replace(/^\/([a-zA-Z])(?:\/|$)/, '$1:/');
