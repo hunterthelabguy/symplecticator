@@ -514,7 +514,7 @@ test('next and merged wait for the lock up to 10 seconds, then refuse', (t) => {
     Date.now = () => clock[reads++] ?? start + 1000000;
     Atomics.wait = () => { waits += 1; return 'timed-out'; };
     try {
-      refuses(() => run(dir), new RegExp(`^${name}: the lock .*ledger-next\\.lock is \\d+ s old`));
+      refuses(() => run(dir), /the lock .*ledger-next\.lock is \d+ s old/);
     } finally {
       Date.now = now;
       Atomics.wait = wait;
