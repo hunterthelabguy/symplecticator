@@ -486,9 +486,10 @@ function bash(command, start) {
       const d = cdTarget(rest);
       const moved = cwds.map((c) => (d && isDir(toPath(d, c)) ? toPath(d, c) : c));
       // Placing matters only to a push or commit, which any command but a kept cd refuses (other), so a cd that is
-      // not kept needs no test here. A cd behind a reserved word adds; one that names no folder stops placing.
+      // not kept needs no test here. A cd behind a reserved word adds and stops placing (after `! cd x &&` bash
+      // skips the next cd); so does one that names no folder.
       const placed = placing && !w.reserved;
-      if (!(d && isDir(toPath(d, cwds[0])))) placing = false;
+      if (!placed || !(d && isDir(toPath(d, cwds[0])))) placing = false;
       cwds = [...new Set(placed ? moved : [...cwds, ...moved])];
       for (const c of [...seen]) if (d && isDir(toPath(d, c))) seen.add(toPath(d, c));
       if (keepsCd(toks)) continue;

@@ -401,6 +401,8 @@ test('writes and removals are checked in every folder a cd names; a push or comm
     refused(bash(`cd "${C}" || exit; rm CLAUDE.md`), 'protected');
     refused(bash(`cd "${C}" || exit; echo x > settings.json`), 'protected');
     refused(bash(`cd "${C}" || exit; cp -r skills .`), 'protected');
+    // A later relative cd is resolved from every folder seen, the one bash may really be in.
+    refused(bash(`cd "${HOME}" || exit; cd .claude; rm CLAUDE.md`), 'protected');
     allowed(bash(`cd "${OTHER}" || exit; rm CLAUDE.md`));
     refused(bash(`(cd "${C}" && rm CLAUDE.md)`), 'protected');
     refused(bash(`echo "$(cd "${C}"; rm CLAUDE.md)"`), 'protected');
@@ -422,6 +424,8 @@ test('writes and removals are checked in every folder a cd names; a push or comm
     for (const w of ['command', 'time']) allowed(bash(`${w} cd "${REPO}"; git push origin feat`, { cwd: OTHER }));
     refused(bash(`cd "${missing}" && cd "${REPO}" && git push origin feat`, { cwd: OTHER }), 'cannot place');
     refused(bash(`if ! cd "${REPO}"; then git push origin feat; fi`, { cwd: OTHER }), 'cannot place');
+    // After ! cd that moved, bash skips what && joins, so a cd after it cannot place a push.
+    refused(bash(`! cd "${REPO}" && cd "${OTHER}"; git push origin feat`, { cwd: T }), 'cannot place');
     refused(bash(`nohup cd "${REPO}"; git push origin feat`, { cwd: OTHER }), 'after another command');
     // A cd to a folder that does not exist names none: the push runs where bash stayed, and nothing is added.
     allowed(bash(`cd "${missing}"; git push origin feat`));
