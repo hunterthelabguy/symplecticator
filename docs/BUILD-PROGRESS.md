@@ -23,7 +23,7 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 22. Resumed: 21.
+Spawned: 22. Resumed: 20.
 
 ## Notes
 
