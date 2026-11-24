@@ -27,6 +27,7 @@ Every plan task landed; none was parked.
 | Clearing round 5's fix: writes checked in every folder a cd names | 2b7a132 (direct) | 2b7a132 | 33 named mutants at eight at once: 31 killed, 2 survivors judged equivalent and their code removed (one was not: see round 6); no scan timeout; full verify green |
 | Round 6's fix: a cd behind a reserved word stops placing again | cebc1a8 (direct) | cebc1a8 | the restored line's mutant and three others killed at eight at once, no scan timeout; full verify green, 441 s |
 | Round 7's fix: Git Bash mount paths read through cygpath | 9c6a01e (direct) | 9c6a01e | the mapping's mutants all killed at eight at once after two dead conditions went, no scan timeout; full verify green, 436 s |
+| Round 8's fix: a drive-less path checked in both readings | b5dd93b (direct) | b5dd93b | this change's mutants killed at eight at once but one that only turns the cache off, no scan timeout; full verify green, 446 s |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -65,7 +66,7 @@ cannot place. A fresh session then fixed round 3's three majors and,
 on your rulings, that held finding; a fresh clearing review reads the
 result.
 
-## Final verify (the tree committed as 9c6a01e; later commits touch only docs)
+## Final verify (the tree committed as b5dd93b; later commits touch only docs)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
@@ -76,7 +77,7 @@ perturb-guard.test.mjs: tests 24, pass 24, fail 0, skipped 0
 perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 ```
 
-436 s wall (441 s at cebc1a8, 448 s at 2b7a132). CI at c84f450, the merge before it: suites on ubuntu-latest
+446 s wall (436 s at 9c6a01e, 441 s at cebc1a8, 448 s at 2b7a132). CI at c84f450, the merge before it: suites on ubuntu-latest
 and macos-latest, and guard-windows, all success; for later heads, see
 the PR's checks. CI at aef35e1 and every first-parent
 head after it through 5a8fc6e passed too; none ran at 32217aa, f9178c3
@@ -269,6 +270,17 @@ review after. The guard now reads such paths through Git Bash's own
 through `/c`); a test pins a bare `cd` before a relative one (a
 survivor the review found). A `cd` whose redirection fails joins the
 known misses beside the folder that cannot be entered.
+
+Round 8 at 65a01ab, a delta review: not cleared, 0 blocker, 1 major, 3
+minor, 2 nit, and the macOS CI job never got a runner (capacity). Round
+7's major confirmed closed. The major was a regression from this
+session: the mapping also read the Write and Edit tools' drive-less
+paths through `cygpath`, so a Write to `/Users/.../.claude/CLAUDE.md`
+passed though Claude Code writes it on the current drive (rerun:
+2dc10d4 refused it). The fix checks such a path in both readings. Three
+mutant survivors got tests (`/tmp` alone, two mount paths in one call,
+the fallback); `/proc/self/cwd` after a `cd`, the `//localhost/C$`
+share and `..` across a mount root join the known misses.
 
 ## Trial: timed mutants four at a time
 

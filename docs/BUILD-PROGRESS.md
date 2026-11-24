@@ -433,9 +433,21 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   went (glob characters in the mount test, since a glob path is cut
   before it reaches it; the exit-status check beside the output check),
   and the fallback to the written path is pinned by a test with no bash
-  on the path, as the owner's pick described ("the path stays unmapped,
-  as today"); cost if wrong: that fallback fails open where bash is
+  on the path, as the question put to the owner described ("If `cygpath`
+  is missing, the path stays unmapped, as today", question text, not the
+  option the owner picked); cost if wrong: that fallback fails open where bash is
   missing, which the hook itself never is.
+- Correction (Claude), an escape: the mapping of mount paths also read
+  the Write and Edit tools' drive-less paths through cygpath, so a Write
+  to `/Users/.../.claude/CLAUDE.md`, which Claude Code reads on the
+  current drive, passed (the delta clearing review at 65a01ab found it;
+  the session reran it: 2dc10d4 refused, 65a01ab let it through). Not
+  probed before landing: the session probed only Bash paths.
+- Ruling (Claude): the fix checks a drive-less mount path in both
+  readings, bash's and a Windows tool's, the fail-closed union used for
+  cds; why: a regression of this session's own, repaired without a new
+  rule; cost if wrong: an over-refusal where a drive-less path means
+  different files to bash and to a tool.
 - Ruling (Claude): the owner's two rulings went into the private ledger
   as their own entries, committed that file alone and not pushed, since
   that checkout holds other sessions' unpushed commits; cost if wrong:
