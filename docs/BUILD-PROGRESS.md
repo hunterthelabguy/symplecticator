@@ -406,6 +406,16 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   rounds found, and the pins that matter only for a push (a `{ }`
   group, `command` and `time`, a reserved word) move onto push tests;
   why: floor 9; cost if wrong: a form's line reads less directly.
+- Correction (Claude), an escape: the earlier ruling in this round that
+  the not-placed test in placement was dead was wrong. Its premise (only
+  a cd behind a leading reserved word fails to place, and every later cd
+  in that compound is behind one too) missed `! cd A && cd B`: bash runs
+  `! cd A`, which moves and reports failure, skips `cd B`, and runs the
+  next command in A, while the guard placed the push in B. The delta
+  clearing review at 7d35599 found it; the session reran it (a throwaway
+  origin's default branch moved; the guard at 4a8b355 refused it). The
+  condition is restored, with a test. Its stated cost ("none") was wrong:
+  the real cost was a push or commit placed in the wrong repo.
 - Ruling (Claude): the owner's two rulings went into the private ledger
   as their own entries, committed that file alone and not pushed, since
   that checkout holds other sessions' unpushed commits; cost if wrong:

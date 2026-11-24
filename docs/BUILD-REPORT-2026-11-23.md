@@ -24,7 +24,8 @@ Every plan task landed; none was parked.
 | Fix round after the run: every folder a cd may leave | 32217aa (direct, fresh session) | 32217aa | 19 named mutants at eight at once: 18 killed, k7 killed after one test line; no scan timeout; full verify green |
 | Clearing round 4's fixes: a wrapped cd moves nothing, a conditional cd adds | 3024f72 (direct) | 3024f72 | 8 named mutants at eight at once: 8 killed, no scan timeout; guard and hook suites green |
 | Merge of main (the ledger script, the one-text port) | c84f450 | c84f450 | full verify of six suites, 581 s; CI green |
-| Clearing round 5's fix: writes checked in every folder a cd names | 2b7a132 (direct) | 2b7a132 | 33 named mutants at eight at once: 31 killed, 2 equivalent with their code removed; no scan timeout; full verify green |
+| Clearing round 5's fix: writes checked in every folder a cd names | 2b7a132 (direct) | 2b7a132 | 33 named mutants at eight at once: 31 killed, 2 survivors judged equivalent and their code removed (one was not: see round 6); no scan timeout; full verify green |
+| Round 6's fix: a cd behind a reserved word stops placing again | cebc1a8 (direct) | cebc1a8 | the restored line's mutant and three others killed at eight at once, no scan timeout; full verify green, 441 s |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -63,7 +64,7 @@ cannot place. A fresh session then fixed round 3's three majors and,
 on your rulings, that held finding; a fresh clearing review reads the
 result.
 
-## Final verify (the tree committed as 2b7a132; later commits touch only docs)
+## Final verify (the tree committed as cebc1a8; later commits touch only docs)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
@@ -74,7 +75,7 @@ perturb-guard.test.mjs: tests 24, pass 24, fail 0, skipped 0
 perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 ```
 
-448 s wall. CI at c84f450, the merge before it: suites on ubuntu-latest
+441 s wall (448 s at 2b7a132). CI at c84f450, the merge before it: suites on ubuntu-latest
 and macos-latest, and guard-windows, all success; for later heads, see
 the PR's checks. CI at aef35e1 and every first-parent
 head after it through 5a8fc6e passed too; none ran at 32217aa, f9178c3
@@ -241,6 +242,18 @@ The minors: `function f { ... }; f`, `coproc` and `stdbuf` join the
 known misses, with CDPATH, glob operands, a quoted `~` and a folder an
 earlier command creates or moves, which the PR body had named without
 listing.
+
+Round 6 at 7d35599, the lighter delta review: not cleared, 0 blocker,
+1 major, 2 minor, 2 nit. Round 5's majors confirmed closed. The major
+was a regression from this session: removing a placement condition as
+dead code let `! cd <repo> && cd <other>; git push origin HEAD` push
+from the first repo while the guard checked the second (rerun: a
+throwaway origin's default branch moved). The condition is restored
+with a test, and a test now pins resolving a `cd` from every folder
+seen (a minor). A write in a function body or loop that runs after a
+later `cd` joins the known misses; a long chain of `cd`s alternating
+letter case grows the folder set on Windows (24 took 24.5 s, per the
+review), listed for you.
 
 ## Trial: timed mutants four at a time
 
