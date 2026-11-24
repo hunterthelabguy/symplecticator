@@ -6,7 +6,7 @@
 // on a protected path, Skill runs only frames, the browser's computer tool only takes screenshots, and Bash is
 // parsed: it refuses pushes to the default branch, force pushes, --all, --mirror, glob refspecs and push options it
 // does not know, gh pr merge, deleting a remote branch outside showcase/, writes to or removal of the owner's
-// protected config (checked in each folder the guard reads a cd as possibly leaving bash in), git commit -F - (a
+// protected config (checked in the starting folder and every folder a cd names), git commit -F - (a
 // message from stdin is not scanned), a git commit or push after any command but a cd bash keeps (top level, ended by
 // &&, ; or a newline) in the same call, a substitution's command included (the scan reads the repo before the call
 // runs), a push or commit after a cd the guard cannot place or where git cannot answer, and a call with a quote or
@@ -455,16 +455,19 @@ function cdTarget(rest) {
 }
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
-// The folders each command may run in, every one checked. A cd bash keeps, with no reserved word before it, while
-// every command before it in the call was a cd that moved, moves each folder to its target where that is a folder.
-// Any other cd, but one ended by | or & (which runs in a shell bash throws away) or run by a wrapper (a program of
-// its own, which is another command), adds its targets: ended by ||, in parentheses or a substitution, behind a
-// reserved word, or after any other command, bash may have run it or not, and moved or not.
+// Writes and removals are checked in every folder seen: the starting folder and each folder a cd names, resolved from
+// every folder seen, since the guard cannot always tell whether bash ran a cd in its own shell (a list ended by &, a
+// piped group). A cd ended by | or & runs in a shell bash throws away, and one run by a wrapper is a program of its
+// own (another command); neither names a folder.
+// A push or commit needs the one folder it runs in, cwds. A cd bash keeps, with no reserved word before it, while
+// every command before it in the call was a cd that moved, moves each folder to its target where that is a folder;
+// any other cd adds its targets, and a push or commit with more than one folder is refused.
 function bash(command, start) {
   const rules = protectedRules(start);
   let cwds = [start];
   let other = false, placing = true;
-  const anyHit = (check, t) => cwds.some((c) => check(t, c, rules));
+  const seen = new Set(cwds);
+  const anyHit = (check, t) => [...seen].some((c) => check(t, c, rules));
   for (const toks of segments(command)) {
     if (readsHeredoc(toks)) continue;
     const { writes, removes, fills } = targets(toks);
@@ -482,12 +485,15 @@ function bash(command, start) {
     if (cmd === 'cd' && !w.wrapped && toks.sep !== '|' && toks.sep !== '&') {
       const d = cdTarget(rest);
       const moved = cwds.map((c) => (d && isDir(toPath(d, c)) ? toPath(d, c) : c));
-      // While placing there is one folder, cwds[0].
-      const placed = placing && keepsCd(toks) && !w.reserved;
-      if (!placed || !(d && isDir(toPath(d, cwds[0])))) placing = false;
+      // Placing matters only to a push or commit, which any command but a kept cd refuses (other), so a cd that is
+      // not kept needs no test here. A cd behind a reserved word adds; one that names no folder stops placing.
+      const placed = placing && !w.reserved;
+      if (!(d && isDir(toPath(d, cwds[0])))) placing = false;
       cwds = [...new Set(placed ? moved : [...cwds, ...moved])];
+      for (const c of [...seen]) if (d && isDir(toPath(d, c))) seen.add(toPath(d, c));
       if (keepsCd(toks)) continue;
-    } else placing = false;
+    }
+    // Any other command makes a later push or commit refuse (other), so placing need not change here.
     const [cwd] = cwds;
     if (cmd === 'gh') {
       const g = rest.filter((a, i) => !/^(-R|--repo)$/.test(a) && !/^(-R|--repo)$/.test(rest[i - 1] ?? '') && !/^(-R.|--repo=)/.test(a));

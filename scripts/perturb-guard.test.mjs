@@ -336,7 +336,8 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   refused(bash(`cd "${join(T, 'no-such-folder')}"; rm CLAUDE.md`, { cwd: C }), 'protected');
   refused(bash(`cd "${OTHER}" extra; rm CLAUDE.md`, { cwd: C }), 'protected');
   refused(bash(`cd "${join(C, 'scan-patterns.local')}"\nrm CLAUDE.md`, { cwd: C }), 'protected');
-  allowed(bash(`cd "${OTHER}"; rm CLAUDE.md`, { cwd: C }));
+  // The starting folder stays checked after a cd away (an over-refusal the owner accepted).
+  refused(bash(`cd "${OTHER}"; rm CLAUDE.md`, { cwd: C }), 'protected');
   refused(bash(`builtin cd "${C}" && rm CLAUDE.md`), 'protected');
   allowed(bash(`cd -P "${OTHER}" && rm CLAUDE.md`));
   // After an invalid option bash moves nowhere, so the folder stays.
@@ -389,43 +390,42 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   allowed(bash('rm -f *'));
   allowed(bash('cat ~/.claude/settings.json'));
 });
-test('a cd moves the folder only after cds that moved; any other cd adds its folder to those checked', () => {
+test('writes and removals are checked in every folder a cd names; a push or commit only where the guard can place it', () => {
   const missing = join(T, 'no-such-folder');
   mkdirSync(join(C, 'cd-sub'));
   mkdirSync(join(REPO, 'sub'));
   try {
     // A relative operand names a folder under the one the cd runs in.
     refused(bash('cd cd-sub; rm ../CLAUDE.md', { cwd: C }), 'protected');
-    // After && too, a cd to a folder that does not exist moves nothing.
-    refused(bash(`cd "${missing}" && true; rm CLAUDE.md`, { cwd: C }), 'protected');
-    allowed(bash(`cd "${OTHER}" && true; rm CLAUDE.md`, { cwd: C }));
-    // Ended by ||, in parentheses or a substitution, or after another command, bash may or may not have moved.
+    // Each folder a cd names is checked beside the old one, however the cd is joined.
     refused(bash(`cd "${C}" || exit; rm CLAUDE.md`), 'protected');
     refused(bash(`cd "${C}" || exit; echo x > settings.json`), 'protected');
     refused(bash(`cd "${C}" || exit; cp -r skills .`), 'protected');
-    refused(bash(`cd "${OTHER}" || exit; rm CLAUDE.md`, { cwd: C }), 'protected');
     allowed(bash(`cd "${OTHER}" || exit; rm CLAUDE.md`));
     refused(bash(`(cd "${C}" && rm CLAUDE.md)`), 'protected');
     refused(bash(`echo "$(cd "${C}"; rm CLAUDE.md)"`), 'protected');
     allowed(bash(`(cd "${OTHER}" && rm CLAUDE.md)`));
-    for (const c of [`true | cd "${OTHER}"; rm CLAUDE.md`, `false && cd "${OTHER}"; rm CLAUDE.md`,
-      `true || cd "${OTHER}"; rm CLAUDE.md`, `if false; then cd "${OTHER}"; fi; rm CLAUDE.md`,
-      `cd "${missing}" && cd "${OTHER}"; rm CLAUDE.md`, `(cd "${OTHER}") || cd "${REPO}"; rm CLAUDE.md`]) {
+    // Forms where bash stays though the cd reads as kept: the starting folder is still checked.
+    for (const c of [`cd "${missing}" && true; rm CLAUDE.md`, `true | cd "${OTHER}"; rm CLAUDE.md`,
+      `false && cd "${OTHER}"; rm CLAUDE.md`, `if false; then cd "${OTHER}"; fi; rm CLAUDE.md`,
+      `nohup cd "${OTHER}"; rm CLAUDE.md`, `cd "${OTHER}" && true & rm CLAUDE.md`,
+      `{ cd "${OTHER}"; } | cat; rm CLAUDE.md`, `cd "${OTHER}" && true & cd cd-sub; rm ../CLAUDE.md`]) {
       refused(bash(c, { cwd: C }), 'protected');
     }
-    // A cd behind a reserved word may not run: in a body, or after a negated condition.
-    refused(bash(`if ! cd "${C}"; then cd "${OTHER}"; fi; rm CLAUDE.md`, { cwd: OTHER }), 'protected');
-    allowed(bash(`{ cd "${OTHER}"; }; rm CLAUDE.md`, { cwd: C }));
-    // A cd run by nohup, env, nice or timeout is a program of its own: bash stays, and it is another command.
-    refused(bash(`nohup cd "${OTHER}"; rm CLAUDE.md`, { cwd: C }), 'protected');
-    refused(bash(`nohup cd "${REPO}"; git push origin feat`, { cwd: OTHER }), 'after another command');
-    for (const w of ['command', 'time']) allowed(bash(`${w} cd "${OTHER}"; rm CLAUDE.md`, { cwd: C }));
-    // A cd ended by | or & runs in a shell bash throws away.
+    // A cd ended by | or & runs in a shell bash throws away, so its folder is not added.
     allowed(bash(`cd "${C}" | true; rm CLAUDE.md`));
     allowed(bash(`cd "${C}" & rm CLAUDE.md`));
-    // A push or commit goes ahead only where the guard knows its one folder.
+    // A push or commit goes ahead only where the guard knows its one folder: after cds that moved, in a { } group,
+    // or behind command or time; not after a cd that stayed, behind a reserved word, or run by a wrapper.
     allowed(bash(`cd "${REPO}" && cd sub && cd .. && git push origin feat`, { cwd: OTHER }));
+    allowed(bash(`{ cd "${REPO}"; git push origin feat; }`, { cwd: OTHER }));
+    for (const w of ['command', 'time']) allowed(bash(`${w} cd "${REPO}"; git push origin feat`, { cwd: OTHER }));
     refused(bash(`cd "${missing}" && cd "${REPO}" && git push origin feat`, { cwd: OTHER }), 'cannot place');
+    refused(bash(`if ! cd "${REPO}"; then git push origin feat; fi`, { cwd: OTHER }), 'cannot place');
+    refused(bash(`nohup cd "${REPO}"; git push origin feat`, { cwd: OTHER }), 'after another command');
+    // A cd to a folder that does not exist names none: the push runs where bash stayed, and nothing is added.
+    allowed(bash(`cd "${missing}"; git push origin feat`));
+    allowed(bash('cd no-such; rm ../.claude/CLAUDE.md', { cwd: HOME }));
   } finally {
     rmSync(join(C, 'cd-sub'), { recursive: true });
     rmSync(join(REPO, 'sub'), { recursive: true });
