@@ -106,6 +106,16 @@ Every step carries the content it needs. Plan failures: "TBD", "add error
 handling", "write tests for the above" without the tests, "similar to T3",
 and any type or function no task defines.
 
+A plan split into PRs prints a later PR's test counts as deltas from the
+base it is cut from ("base + 2"), not as totals: a fix that lands in an
+earlier PR then leaves them true (seen in a past build: PR 1's batch added
+nine tests and every total PR 2 printed read nine low).
+
+A test that walks "each boundary" checks its walk's bounds against the
+boundaries it computes; a cap borrowed from elsewhere (a probe's span) is a
+placeholder until shown to cover them (seen in a past build: a cap of 500
+skipped 292 boundary names up to 644, and the ruled spec words said "each").
+
 ## Self-review
 
 Against the spec, fresh: (1) every requirement maps to a task; (2) no

@@ -101,7 +101,10 @@ For each frontier task, up to 4 at once (a default, not a law):
    committing (every review after the first few has found one or two false
    sentences, and none after this instruction was a false claim that
    landed); report what was built, the Verify command's output, and any
-   concern.
+   concern. The brief also says: start no background process, run in the
+   foreground, and finish with one report (seen in a past build: an
+   implementer stopped with background work running and re-sent its
+   report four times until the controller stopped it).
    The controller also reads the plan's commit body for the task sentence by
    sentence against the task's own code steps and the spec before the brief
    goes out, corrects a false or wide sentence in the brief file, and logs
@@ -334,7 +337,11 @@ it voids it.
      the owner rules on them at merge. Fixing one is a new commit, which
      voids the review and buys another, and a review at this depth rarely
      comes back empty. A wrong claim in the PR body is corrected by editing
-     the body, which is not a commit.
+     the body, which is not a commit. A sentence a reviewer drafts for the
+     body is checked by the controller against that reviewer's own
+     measurements before it is pasted (seen in a past build: round 1's pasted
+     sentence named a cap at a literal 10 where its counts held for
+     `LIMITS.rows - 1`, and cost round 2 a major).
    - **A defect that a fix round made** is a major, whatever its size.
    - **Delta review:** once one clearing review has read the whole diff, a
      later round may read only the diff from the last reviewed head to the
