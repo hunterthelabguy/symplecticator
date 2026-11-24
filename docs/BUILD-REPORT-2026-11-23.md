@@ -294,6 +294,17 @@ runtime). The test now runs the guard under the TEMP it asked; a test
 pins a drive-less Write through a junction (a survivor); a Bash path
 spelled `//?/C:/...` joins the known misses.
 
+Round 10 at 8743947, a delta review of that fix: cleared, 0 blocker, 0
+major, 1 minor. CI green on Linux, macOS and Windows; the Windows
+spellings test ran on the runner and passed, also under a copied fresh
+msys runtime. The minor: the Windows test relied on a junction an
+earlier test makes, so it failed when run alone by name. You said
+"Merge it" (to "Merge PR #13 now?", Claude-drafted); PR #13 merged as
+b52a04b, a merge commit, and CI on main passed. A follow-up pull
+request makes the junction in the suite's setup and adds this round
+here; neither could land before the merge without voiding the
+clearing.
+
 ## Trial: timed mutants four at a time
 
 Ruled by the owner in session, quoted: "run timed mutants four at a time
