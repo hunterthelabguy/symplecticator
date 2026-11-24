@@ -304,10 +304,17 @@ test('Windows spellings: /c/ form and other case refused', { skip: process.platf
   refused(bash(`rm "/proc/cygdrive${slash}/CLAUDE.md"`), 'protected');
   const slashRepo = REPO.replace(/^([A-Za-z]):/, (m, d) => `/${d.toLowerCase()}`).replace(/\\/g, '/');
   refused(bash(`cd "/proc/cygdrive${slashRepo}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
+  refused(bash(`rm "/proc/cygdrive${slash}/CLAUDE.mx" "/proc/cygdrive${slash}/CLAUDE.md"`), 'protected');
+  // /tmp alone is a mount path too: the user's temp folder, where this suite's folders are made.
+  const unixC = spawnSync('bash', ['-c', 'cygpath -u -- "$1"', 'cygpath', C], { encoding: 'utf8' }).stdout.trim();
+  if (unixC.startsWith('/tmp/')) refused(bash(`cd /tmp && rm ${unixC.slice(5)}/CLAUDE.md`, { cwd: C }), 'protected');
+  else t.diagnostic(`the config folder is not under /tmp here (${unixC}): the /tmp assertion did not run`);
+  // A Write or Edit reads a drive-less path on the current drive, as Claude Code does.
+  refused(run('Write', { file_path: C.slice(2).replace(/\\/g, '/') + '/CLAUDE.md' }), 'protected');
   // With no bash to ask, a mount path stays as written, as before mount paths were read (a known miss; the hook
   // itself runs under bash).
   const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === 'path');
-  allowed(bash(`rm "/proc/cygdrive${slash}/CLAUDE.md"`, { extraEnv: { [pathKey]: '' } }));
+  allowed(bash(`rm "/proc/cygdrive${slash}/CLAUDE.md"`, { cwd: C, extraEnv: { [pathKey]: '' } }));
   // The raw command is scanned with the home folder read as ~, in its /c/ form and in other case too.
   writeFileSync(join(HOME, 'clean-msg.txt'), 'subject\n\nclean\n');
   allowed(bash(`git commit -F "${slash.replace(/\/\.claude$/, '')}/clean-msg.txt"`));

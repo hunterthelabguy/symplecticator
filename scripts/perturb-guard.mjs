@@ -55,22 +55,22 @@ const LOOKS = new Set(['screenshot', 'zoom']);
 
 // A path as the shell meant it: ~, $HOME and ${HOME} expanded, Git Bash's /c/... read as C:/... on Windows (and
 // /c alone as C:/, not the current folder on C:), its other mount paths (/tmp/..., /proc/cygdrive/...) read through
-// its own cygpath, made absolute. / alone stays as written: rm -rf / reaches C: through /c. (A glob path is cut
-// before its glob, in globHits, so none reaches here.)
-function toPath(p, cwd) {
+// its own cygpath unless asked for a Windows tool's reading (on the current drive), made absolute. / alone stays as
+// written, read as the drive's root: removing it reaches every drive through the /c mounts.
+function toPath(p, cwd, mounts = true) {
   let s = String(p).replace(/^(~|\$HOME|\$\{HOME\})(?=$|[\\/])/, () => HOME);
   if (WIN) s = s.replace(/^\/([a-zA-Z])(?:\/|$)/, '$1:/');
-  if (WIN && /^\/[^/]/.test(s)) s = mount(s);
+  if (mounts && WIN && /^\/[^/]/.test(s)) s = mount(s);
   return resolve(cwd, s);
 }
 // Through bash, which puts Git's cygpath on the path; with no answer the path stays as written.
-const mounts = new Map();
+const mounted = new Map();
 function mount(s) {
-  if (!mounts.has(s)) {
+  if (!mounted.has(s)) {
     const r = spawnSync('bash', ['-c', 'cygpath -w -- "$1"', 'cygpath', s], { encoding: 'utf8' });
-    mounts.set(s, r.stdout?.trim() || s);
+    mounted.set(s, r.stdout?.trim() || s);
   }
-  return mounts.get(s);
+  return mounted.get(s);
 }
 // The real path of the longest part of s that exists, with the rest added back: 8.3 short names, junctions and
 // symlinks resolved, so those spellings of one file compare equal.
@@ -92,10 +92,10 @@ function form(s) {
 }
 // The same path in both spellings it compares in: as written (made absolute) and real. A path is protected when any
 // of its spellings meets any spelling of a rule: the real one alone would miss removing a folder that holds a link
-// to config, since the rule then names the link's target.
+// to config, since the rule then names the link's target. On Windows a drive-less mount path is read both ways, as
+// bash reads it (through cygpath) and as a Windows tool does (on the current drive), since the guard checks both.
 function spellings(p, cwd) {
-  const s = toPath(p, cwd);
-  return [...new Set([form(s), form(real(s))])];
+  return [...new Set([toPath(p, cwd), toPath(p, cwd, false)].flatMap((s) => [form(s), form(real(s))]))];
 }
 
 function git(cwd, ...args) {
