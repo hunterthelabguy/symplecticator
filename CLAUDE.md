@@ -7,10 +7,16 @@ the rest: in setup, "the owner" means you, not the maintainer.
 - **Maintainer identity (not the adopter's):**
   `hunterthelabguy <hunterthelabguy@proton.me>`. Trailer: none (no
   Co-Authored-By).
-- **Verify:** `bash scripts/ground-truth.test.sh`, `bash scripts/build-stop-gate.test.sh`
-  and `node --test scripts/ledger.test.mjs`, all green. A check that cannot
-  run here (the jq checks without `gh` signed in, the gh-missing case when
-  `gh` cannot be hidden) counts as skipped, not passed.
+- **Verify:** `bash scripts/ground-truth.test.sh`,
+  `bash scripts/build-stop-gate.test.sh`,
+  `node --test scripts/ledger.test.mjs`,
+  `bash scripts/commit-scan.test.sh`,
+  `node --test scripts/perturb-guard.test.mjs` and
+  `bash scripts/perturb-hook.test.sh`, all green. CI runs all six on
+  Linux and macOS, and the guard suite (`node --test`) alone on Windows.
+  A check that cannot run here (the jq checks without `gh` signed in, the
+  gh-missing case when `gh` cannot be hidden) counts as skipped, not
+  passed.
 - **Landing:** after commit zero, every change lands by pull request with
   green CI. The maintainer merges, or Claude does on the maintainer's
   word for that pull request, quoted in it, once the pull request reads

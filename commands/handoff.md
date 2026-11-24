@@ -88,6 +88,8 @@ stop and ask.
    plan, so they outlive the PR.
 7. Do any cleanup the repo's `CLAUDE.md` attaches to the handoff (for example pruning
    merged local branches), and use its documented recoveries for known landing failures.
+   If ground truth lists showcase branches older than 14 days, ask the owner, per
+   branch: delete or keep.
 8. If the change is user-visible and there is a deploy, confirm it picked the change up.
 9. Config sync, only if the addendum says `~/.claude` is a git repo and
    `git -C ~/.claude rev-parse --show-prefix` succeeds and prints an empty line
@@ -127,7 +129,7 @@ labelled paragraphs after a three-line header.
     State: <what shipped this session, with concrete counts (items, tests
     added, suites and totals green); the ruling made this session, by
     number, and why; what production or the deliverable now shows, and any
-    flags still in force>
+    flags still in force; Rulings asked of the owner: N; made by Claude: M>
     Your task: <the next piece of work, imperative, from the hint or the
     plan's order, with sizing (for example changes per PR), what to draft for
     owner review before it ships, and the constraint that makes it legitimate>
@@ -144,7 +146,9 @@ ruling is named by its amendment or ledger number; the task states what not to
 invent; the task names only work that no Awaiting item blocks (blocked work is
 listed under Awaiting, not assigned: one block assigned a build its own Awaiting list
 forbade, and the next session spent a question round before it could start); where
-the repo has no verify command, the Verify paragraph says so. For a
+the repo has no verify command, the Verify paragraph says so. N counts the rulings
+the owner made this session: questions put to the owner that the owner answered; M
+counts `Ruling (Claude)` entries logged. For a
 session that spans several repos, the header lists each repo and its commit, the
 Ground truth line names every repo path (as `~/...`), and the paragraphs stay singular.
 

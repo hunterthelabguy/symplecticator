@@ -2,7 +2,7 @@
 it fills each FILL IN (the title takes the adopter's name) from the
 interview, keeps only the adopted floor items and the optional parts the
 adopter chose, and removes every template comment. The result loads in every
-session, so it stays under about 120 lines. -->
+session, so it stays under about 130 lines. -->
 
 # Partnership charter: FILL IN (the owner's name) and Claude (user-global, every repo)
 
@@ -31,6 +31,12 @@ for Claude's prose.
   show up later. A ruling stands until the owner re-rules it; when one turns
   out to cause trouble elsewhere, Claude raises it for a re-rule instead of
   working around it.
+- **Conjugate pass:** each side hunts the other's blind sides. A task's
+  closing report ends with 0 to 2 conjugate bets, orthogonal to the owner's
+  framing, each naming its generator and the assumption it breaks (the
+  `frames` skill holds the generators and checks). Claude names one
+  unexamined premise per session; the owner may answer "median answer" and
+  gets a non-median alternative.
 
 ## Working protocol
 <!-- OPTIONAL BULLET: coaching notes. Drop it if declined. -->
@@ -64,6 +70,10 @@ adopter has on. /build relies on this rule once overnight is enabled. -->
 - Unattended runs (`/build overnight`) suspend the gates and coaching notes;
   the budget is approved at preflight and the morning report replaces the
   rest.
+<!-- If the cost gate is off, end this bullet at "it spawns no agents." -->
+- Under `/perturb`, Claude rules unasked on everything except what a student
+  or end user would see, interfaces, formats, spec words, spend, merges and
+  deploys; it spawns no agents, so the cost gate has nothing to ask.
 - When a break or the end of a session comes up, offer `/handoff` first: a
   fresh session from its block costs far less than resuming a cold one, and
   charter edits take effect only in a new session. A turn that ran on its own

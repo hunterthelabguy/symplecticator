@@ -1,6 +1,7 @@
-# The three script suites, on Linux and on macOS. macOS is the point: its stock bash 3.2, missing timeout and
+# The test suites, on Linux and on macOS. macOS is the point: its stock bash 3.2, missing timeout and
 # gtimeout, and BSD touch are the paths the scripts' portability fixes take, and no Mac had run them before.
 # A suite's own skips (no cygpath; gh sharing a folder with git) stay skips; any FAIL fails the job.
+# A Windows job runs the guard suite alone (node only).
 name: test
 
 on:
@@ -36,3 +37,18 @@ jobs:
         run: node --version
       - if: ${{ !cancelled() }}
         run: node --test scripts/ledger.test.mjs
+      - if: ${{ !cancelled() }}
+        run: bash scripts/commit-scan.test.sh
+      - if: ${{ !cancelled() }}
+        run: node --test scripts/perturb-guard.test.mjs
+      - if: ${{ !cancelled() }}
+        run: bash scripts/perturb-hook.test.sh
+
+  guard-windows:
+    # The guard suite alone on Windows, where its drive-letter, /c/ and case-folding paths run. The bash suites
+    # stay on Linux and macOS.
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: node --test scripts/perturb-guard.test.mjs
