@@ -70,3 +70,17 @@ def test_energy():
 def test_energy():
     assert energy([0.6, 0.8]) == pytest.approx(0.5)
 ```
+
+**Long sequences**: a test of a long list or array gives its last element a
+value that differs from the rest, and asserts it, so a mutant that drops,
+repeats or mishandles the end of the sequence is killed. Same-valued
+elements let such a mutant pass.
+
+```python
+# BAD: every element equal; a mutant that drops or repeats the last one survives
+samples = [1.0] * 150_000
+
+# GOOD: the last element differs, and the test asserts it
+samples = [1.0] * 149_999 + [2.0]
+assert smooth(samples)[-1] == pytest.approx(2.0)
+```

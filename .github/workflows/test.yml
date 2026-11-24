@@ -32,6 +32,11 @@ jobs:
       - run: bash scripts/ground-truth.test.sh
       - if: ${{ !cancelled() }}
         run: bash scripts/build-stop-gate.test.sh
+      - name: Node in use
+        if: ${{ !cancelled() }}
+        run: node --version
+      - if: ${{ !cancelled() }}
+        run: node --test scripts/ledger.test.mjs
       - if: ${{ !cancelled() }}
         run: bash scripts/commit-scan.test.sh
       - if: ${{ !cancelled() }}

@@ -39,6 +39,25 @@ stop and ask.
 3. Commit in the charter's commit form (floor item 4): subject 72 chars or less,
    dense narrative body with the why. Trailer per the addendum's Commit trailer
    line, unless the repo's `CLAUDE.md` says otherwise.
+
+   If the repo has a `LEDGER_INDEX.md`, run the ledger script now, after
+   the commit and before the push, in the folder that holds it. First
+   `node ~/.claude/scripts/ledger.mjs check`: a FAIL line means stop, fix
+   the index, and commit the fix before you push. If `check` exits with
+   anything but 0 and prints no FAIL line, stop as for a FAIL line. Then
+   `node ~/.claude/scripts/ledger.mjs merged`: when a round's pull request
+   has merged, it commits the index by itself on the branch you are on, so
+   the push carries it; name the rulings it settled in the handoff block.
+   If `merged` exits 2 it changed nothing. Its message says why, most
+   often one of these: the index has uncommitted changes, `gh` is missing
+   or not signed in, another session holds the lock, or rows name pull
+   requests while `pr-repo` is `none`. Put that message in the handoff
+   block and go on with the handoff; the rounds stay as they are until
+   the next one. If `check`
+   reported the ledger over its threshold, offer
+   `node ~/.claude/scripts/ledger.mjs move`. Run it only on a yes, on a
+   clean tree, and commit the three files it changes together before the
+   push.
 4. Push via the repo's remote as configured.
 5. Before any merge, check the clearing review: the PR body's
    `Review: <reviewer> at <sha>` line must name the PR's head commit. Run the

@@ -12,11 +12,20 @@ run as a patch the fold copies from.
 **Hard rules for the subagent:** read-only on the repo. All work happens in a
 throwaway git tree of the base commit under the scratchpad (`git worktree
 add` on a throwaway branch, or an export with `git init`), deleted at the end
-once its patch is saved. Dependencies (`node_modules`, a Python virtual
-environment) may be linked or reused from the real checkout; nothing is
-installed.
-Stop any server the probe started by its own process or task id, never by
-program name.
+once its patch is saved. Dependencies are never linked or reused from the
+real checkout into the scratch tree (a recursive delete can follow the link
+into the real checkout): install from the lockfile inside the scratch tree
+(`npm ci`, or the language's equivalent), and install nothing anywhere
+else. On Windows an export is made with `git -c core.autocrlf=false
+archive`, so its files keep the line ends the repository stores and an
+exact-match edit script applies (three agents each lost time to a CRLF
+export). A subagent may be unable to write into a notes repo, and the
+harness may refuse a report file from a subagent anywhere: its patch and
+probes go in the patch folder under the scratchpad, which the controller
+copies beside the plan, and its report comes back as its final message,
+which the controller saves by hand. Stop any server the probe started by
+its own process or task id, never by program name; so are test workers a
+timeout leaves behind.
 
 ```
 Subagent (general-purpose, strongest model, effort high):
@@ -57,6 +66,15 @@ Subagent (general-purpose, strongest model, effort high):
        everything the plan's verify steps name, plus build, typecheck,
        unit tests, and any dev or preview server the change touches.
        Record what differs from the plan's expectations.
+       Run every mutant the plan names one at a time against the full
+       suite, under a timeout, restoring the file after each, and list
+       every test that fails: is each new test the sole killer of at least
+       one mutant, as floor item 9 asks? Then try a few mutants of your own
+       on the code each task adds; a survivor there is a finding. Where the
+       spec states a rule and then lists cases, aim one of them at the
+       rule outside its listed cases. Where a stated failure message
+       differs from the run's output, give the output's text, copied,
+       as the fix.
     3. Compare the built result with the spec's intent, not only with the
        plan's checks: what changed at runtime that nothing asserts
        (ordering, cascade, bundling, polyfills, targets, sizes, URLs that
@@ -88,7 +106,8 @@ Subagent (general-purpose, strongest model, effort high):
     CONFIRMED/PLAUSIBLE, each fix finding naming its F commit and label;
     then a numbered list of concrete edits to the plan; then the patch
     folder and the tripwire's output; then the scratch artefacts you left
-    and the servers you stopped. No file writes in the repo.
+    and the servers you stopped. No file writes in the repo. The report is
+    your final message; do not write it to a file.
 ```
 
 **After the report:** a fresh context folds the findings into a revision,

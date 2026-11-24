@@ -49,6 +49,10 @@ Subagent (general-purpose):
 
     Your review is read-only on this checkout. Do not mutate the working
     tree, the index, HEAD, or branch state in any way.
+    Run every shell command from your scratch folder, with paths
+    given in full (`git -C <worktree> ...`), never with this
+    checkout as the working directory: a stray redirect then lands
+    in scratch, not in the tree.
 
     ## You Do Not Dispatch Subagents
 
@@ -78,6 +82,21 @@ Subagent (general-purpose):
     heavy validation seems warranted, recommend it in your report instead of
     running it. If you cannot run commands in this environment, name the
     test you would run.
+
+    One measurement is standard, not heavy validation: floor 9's. For each
+    mutant the task names, and for each new or changed test with none
+    named, apply one mutant at a time and run the full suite, under a
+    timeout, restoring the file after each. Do it in a scratch export of
+    [HEAD_SHA] outside every repo, installed from the lockfile, never with
+    node_modules junctioned or symlinked in, and never in the worktree.
+    List every test that fails under each mutant. A new test that is the
+    sole killer of no mutant, or a mutant in the task's new code that
+    nothing kills, is a finding: Important when it leaves a spec sentence
+    unpinned, Minor otherwise. Where the spec states a rule and then lists
+    cases, aim one mutant at the rule outside its listed cases (a signed
+    value, a neighbouring form): tests that check only the listed cases
+    leave the rule unpinned. Stop any test workers a timeout leaves
+    running, by their own process id.
 
     Warnings or other noise in the implementer's reported test output are
     findings; test output should be pristine.
@@ -128,6 +147,12 @@ Subagent (general-purpose):
     **Tests:**
     - Do the new and changed tests verify real behavior, not mocks?
     - Are the task's edge cases covered?
+
+    **Commit body:**
+    - Read it sentence by sentence against the code and the spec. For every
+      sentence that is false, or wider than the code, give the corrected
+      line, ready to paste. Does it cite the spec sections and carry no
+      private label the repo's CLAUDE.md bars?
 
     **Structure:**
     - Does each file have one clear responsibility with a well-defined interface?
