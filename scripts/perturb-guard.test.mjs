@@ -300,6 +300,14 @@ test('Windows spellings: /c/ form and other case refused', { skip: process.platf
   const [drive, ...parts] = C.split(/[\\/]/);
   refused(bash(`cd /${drive[0].toLowerCase()} && rm -rf ${parts.join('/')}`), 'protected');
   allowed(bash(`cd /${drive[0].toLowerCase()} && rm -rf ${parts.join('/')}-not`));
+  // A Git Bash mount path (as mktemp prints /tmp/...) names the folder bash reaches through it.
+  refused(bash(`rm "/proc/cygdrive${slash}/CLAUDE.md"`), 'protected');
+  const slashRepo = REPO.replace(/^([A-Za-z]):/, (m, d) => `/${d.toLowerCase()}`).replace(/\\/g, '/');
+  refused(bash(`cd "/proc/cygdrive${slashRepo}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
+  // With no bash to ask, a mount path stays as written, as before mount paths were read (a known miss; the hook
+  // itself runs under bash).
+  const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === 'path');
+  allowed(bash(`rm "/proc/cygdrive${slash}/CLAUDE.md"`, { extraEnv: { [pathKey]: '' } }));
   // The raw command is scanned with the home folder read as ~, in its /c/ form and in other case too.
   writeFileSync(join(HOME, 'clean-msg.txt'), 'subject\n\nclean\n');
   allowed(bash(`git commit -F "${slash.replace(/\/\.claude$/, '')}/clean-msg.txt"`));
@@ -426,6 +434,8 @@ test('writes and removals are checked in every folder a cd names; a push or comm
     refused(bash(`if ! cd "${REPO}"; then git push origin feat; fi`, { cwd: OTHER }), 'cannot place');
     // After ! cd that moved, bash skips what && joins, so a cd after it cannot place a push.
     refused(bash(`! cd "${REPO}" && cd "${OTHER}"; git push origin feat`, { cwd: T }), 'cannot place');
+    // A bare cd names no folder the guard follows, so a cd after it cannot place a push.
+    refused(bash('cd; cd sub; git push origin feat'), 'cannot place');
     refused(bash(`nohup cd "${REPO}"; git push origin feat`, { cwd: OTHER }), 'after another command');
     // A cd to a folder that does not exist names none: the push runs where bash stayed, and nothing is added.
     allowed(bash(`cd "${missing}"; git push origin feat`));

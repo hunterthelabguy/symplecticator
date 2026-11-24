@@ -54,11 +54,23 @@ const SAFE = {
 const LOOKS = new Set(['screenshot', 'zoom']);
 
 // A path as the shell meant it: ~, $HOME and ${HOME} expanded, Git Bash's /c/... read as C:/... on Windows (and
-// /c alone as C:/, not the current folder on C:), made absolute.
+// /c alone as C:/, not the current folder on C:), its other mount paths (/tmp/..., /proc/cygdrive/...) read through
+// its own cygpath, made absolute. / alone stays as written: rm -rf / reaches C: through /c. (A glob path is cut
+// before its glob, in globHits, so none reaches here.)
 function toPath(p, cwd) {
   let s = String(p).replace(/^(~|\$HOME|\$\{HOME\})(?=$|[\\/])/, () => HOME);
   if (WIN) s = s.replace(/^\/([a-zA-Z])(?:\/|$)/, '$1:/');
+  if (WIN && /^\/[^/]/.test(s)) s = mount(s);
   return resolve(cwd, s);
+}
+// Through bash, which puts Git's cygpath on the path; with no answer the path stays as written.
+const mounts = new Map();
+function mount(s) {
+  if (!mounts.has(s)) {
+    const r = spawnSync('bash', ['-c', 'cygpath -w -- "$1"', 'cygpath', s], { encoding: 'utf8' });
+    mounts.set(s, r.stdout?.trim() || s);
+  }
+  return mounts.get(s);
 }
 // The real path of the longest part of s that exists, with the rest added back: 8.3 short names, junctions and
 // symlinks resolved, so those spellings of one file compare equal.
