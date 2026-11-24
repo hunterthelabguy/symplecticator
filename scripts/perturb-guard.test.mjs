@@ -413,6 +413,13 @@ test('a cd moves the folder only after cds that moved; any other cd adds its fol
       `cd "${missing}" && cd "${OTHER}"; rm CLAUDE.md`, `(cd "${OTHER}") || cd "${REPO}"; rm CLAUDE.md`]) {
       refused(bash(c, { cwd: C }), 'protected');
     }
+    // A cd behind a reserved word may not run: in a body, or after a negated condition.
+    refused(bash(`if ! cd "${C}"; then cd "${OTHER}"; fi; rm CLAUDE.md`, { cwd: OTHER }), 'protected');
+    allowed(bash(`{ cd "${OTHER}"; }; rm CLAUDE.md`, { cwd: C }));
+    // A cd run by nohup, env, nice or timeout is a program of its own: bash stays, and it is another command.
+    refused(bash(`nohup cd "${OTHER}"; rm CLAUDE.md`, { cwd: C }), 'protected');
+    refused(bash(`nohup cd "${REPO}"; git push origin feat`, { cwd: OTHER }), 'after another command');
+    for (const w of ['command', 'time']) allowed(bash(`${w} cd "${OTHER}"; rm CLAUDE.md`, { cwd: C }));
     // A cd ended by | or & runs in a shell bash throws away.
     allowed(bash(`cd "${C}" | true; rm CLAUDE.md`));
     allowed(bash(`cd "${C}" & rm CLAUDE.md`));

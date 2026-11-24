@@ -29,7 +29,8 @@ it refuses, among others, writes to or removal of the owner's protected
 config; pushes to the default branch, force pushes, `gh pr merge`, and
 deleting remote branches outside `showcase/`; `git commit -F -`; and a
 `git commit` or `git push` that follows any command in the same Bash call
-but a `cd` joined to it by `&&`, `;` or a newline. It scans every other
+but a plain `cd` to a folder that exists, joined to it by `&&`, `;` or a
+newline. It scans every other
 commit for private values. A refusal is not an obstacle to route around:
 say what was refused and why you wanted it, and the owner runs it if they
 approve. The guard is a tripwire, not a sandbox; never write a script to

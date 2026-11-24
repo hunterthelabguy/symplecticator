@@ -6,10 +6,11 @@
 // on a protected path, Skill runs only frames, the browser's computer tool only takes screenshots, and Bash is
 // parsed: it refuses pushes to the default branch, force pushes, --all, --mirror, glob refspecs and push options it
 // does not know, gh pr merge, deleting a remote branch outside showcase/, writes to or removal of the owner's
-// protected config (checked in every folder a cd may have left bash in), git commit -F - (a message from stdin is not
-// scanned), a git commit or push after any command but a cd bash keeps (top level, ended by &&, ; or a newline) in
-// the same call, a substitution's command included (the scan reads the repo before the call runs), a push or commit
-// after a cd the guard cannot place or where git cannot answer, and a call with a quote or substitution left open.
+// protected config (checked in each folder the guard reads a cd as possibly leaving bash in), git commit -F - (a
+// message from stdin is not scanned), a git commit or push after any command but a cd bash keeps (top level, ended by
+// &&, ; or a newline) in the same call, a substitution's command included (the scan reads the repo before the call
+// runs), a push or commit after a cd the guard cannot place or where git cannot answer, and a call with a quote or
+// substitution left open.
 // Paths compare in both their written and their real spelling (8.3 names, junctions and symlinks resolved). Before
 // every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file and the raw command.
 // It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
@@ -260,13 +261,21 @@ const WRAP = {
 };
 
 // The command's words: redirections and their targets dropped, then leading reserved words, env assignments and
-// wrappers with their options (and timeout's duration).
+// wrappers with their options (and timeout's duration). Marked reserved when a reserved word but { was dropped (the
+// command may not run, or runs negated), and wrapped when a wrapper that runs a program was (bash runs a cd then as
+// a program of its own, so it moves nothing); command, builtin and time run the builtin itself.
+const RUNS_BUILTIN = new Set(['command', 'builtin', 'time']);
 function words(toks) {
   const w = toks.filter((t, i) => !isRedir(t) && !isRedir(toks[i - 1]));
   for (;;) {
     const h = w[0];
-    if (PREFIX.has(h) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(h ?? '')) { w.shift(); continue; }
+    if (PREFIX.has(h) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(h ?? '')) {
+      if (PREFIX.has(h) && h !== '{') w.reserved = true;
+      w.shift();
+      continue;
+    }
     if (!Object.hasOwn(WRAP, h ?? '')) return w;
+    if (!RUNS_BUILTIN.has(h)) w.wrapped = true;
     w.shift();
     while (w.length && /^-./.test(w[0])) {
       const o = w.shift();
@@ -446,10 +455,11 @@ function cdTarget(rest) {
 }
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
-// The folders each command may run in, every one checked. A cd bash keeps, while every command before it in the call
-// was a cd that moved, moves each folder to its target where that is a folder. Any other cd, but one ended by | or &
-// (which runs in a shell bash throws away), adds its targets: ended by ||, in parentheses or a substitution, or after
-// any other command, bash may have run it or not, and moved or not.
+// The folders each command may run in, every one checked. A cd bash keeps, with no reserved word before it, while
+// every command before it in the call was a cd that moved, moves each folder to its target where that is a folder.
+// Any other cd, but one ended by | or & (which runs in a shell bash throws away) or run by a wrapper (a program of
+// its own, which is another command), adds its targets: ended by ||, in parentheses or a substitution, behind a
+// reserved word, or after any other command, bash may have run it or not, and moved or not.
 function bash(command, start) {
   const rules = protectedRules(start);
   let cwds = [start];
@@ -467,12 +477,13 @@ function bash(command, start) {
     for (const t of fills) {
       if (anyHit(hasGlob(t) ? globHits : holdsProtected, t)) refuse(`a recursive copy to ${t}`, 'it is or holds protected config under /perturb');
     }
-    const [cmd, ...rest] = words(toks);
-    if (cmd === 'cd' && toks.sep !== '|' && toks.sep !== '&') {
+    const w = words(toks);
+    const [cmd, ...rest] = w;
+    if (cmd === 'cd' && !w.wrapped && toks.sep !== '|' && toks.sep !== '&') {
       const d = cdTarget(rest);
       const moved = cwds.map((c) => (d && isDir(toPath(d, c)) ? toPath(d, c) : c));
       // While placing there is one folder, cwds[0].
-      const placed = placing && keepsCd(toks);
+      const placed = placing && keepsCd(toks) && !w.reserved;
       if (!placed || !(d && isDir(toPath(d, cwds[0])))) placing = false;
       cwds = [...new Set(placed ? moved : [...cwds, ...moved])];
       if (keepsCd(toks)) continue;
