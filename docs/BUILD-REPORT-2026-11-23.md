@@ -26,6 +26,7 @@ Every plan task landed; none was parked.
 | Merge of main (the ledger script, the one-text port) | c84f450 | c84f450 | full verify of six suites, 581 s; CI green |
 | Clearing round 5's fix: writes checked in every folder a cd names | 2b7a132 (direct) | 2b7a132 | 33 named mutants at eight at once: 31 killed, 2 survivors judged equivalent and their code removed (one was not: see round 6); no scan timeout; full verify green |
 | Round 6's fix: a cd behind a reserved word stops placing again | cebc1a8 (direct) | cebc1a8 | the restored line's mutant and three others killed at eight at once, no scan timeout; full verify green, 441 s |
+| Round 7's fix: Git Bash mount paths read through cygpath | 9c6a01e (direct) | 9c6a01e | the mapping's mutants all killed at eight at once after two dead conditions went, no scan timeout; full verify green, 436 s |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -64,7 +65,7 @@ cannot place. A fresh session then fixed round 3's three majors and,
 on your rulings, that held finding; a fresh clearing review reads the
 result.
 
-## Final verify (the tree committed as cebc1a8; later commits touch only docs)
+## Final verify (the tree committed as 9c6a01e; later commits touch only docs)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
@@ -75,7 +76,7 @@ perturb-guard.test.mjs: tests 24, pass 24, fail 0, skipped 0
 perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 ```
 
-441 s wall (448 s at 2b7a132). CI at c84f450, the merge before it: suites on ubuntu-latest
+436 s wall (441 s at cebc1a8, 448 s at 2b7a132). CI at c84f450, the merge before it: suites on ubuntu-latest
 and macos-latest, and guard-windows, all success; for later heads, see
 the PR's checks. CI at aef35e1 and every first-parent
 head after it through 5a8fc6e passed too; none ran at 32217aa, f9178c3
@@ -254,6 +255,20 @@ seen (a minor). A write in a function body or loop that runs after a
 later `cd` joins the known misses; a long chain of `cd`s alternating
 letter case grows the folder set on Windows (24 took 24.5 s, per the
 review), listed for you.
+
+Round 7 at 2dc10d4, a delta review: not cleared, 0 blocker, 1 major, 4
+minor, 1 nit. Round 6's major confirmed closed. The major, present
+since the guard landed: on Windows a `cd` to a Git Bash mount path,
+such as the `/tmp/...` that `mktemp -d` prints, named no folder the
+guard found, so a push after it was checked in the starting repo
+(rerun: a throwaway origin's default branch moved; and `rm` of the
+config file spelled through `/proc/cygdrive` removed it). You ruled the
+mapping ("Map mount paths (Recommended)", Claude-drafted) and a delta
+review after. The guard now reads such paths through Git Bash's own
+`cygpath` on Windows, leaving `/` alone (`rm -rf /` reaches `C:`
+through `/c`); a test pins a bare `cd` before a relative one (a
+survivor the review found). A `cd` whose redirection fails joins the
+known misses beside the folder that cannot be entered.
 
 ## Trial: timed mutants four at a time
 

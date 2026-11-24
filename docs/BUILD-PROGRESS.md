@@ -416,6 +416,26 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   origin's default branch moved; the guard at 4a8b355 refused it). The
   condition is restored, with a test. Its stated cost ("none") was wrong:
   the real cost was a push or commit placed in the wrong repo.
+- Owner ruling, 2026-11-24, after clearing round 7 (a delta, not
+  cleared at 2dc10d4: on Windows a cd to a Git Bash mount path named no
+  folder the guard found): asked "What now?" (Claude-drafted), the owner
+  picked "Map mount paths (Recommended)": "Land the cygpath mapping
+  test-first, plus the reviewer's missing test (a bare `cd` then a
+  relative `cd` before a push). The redirect-failed `cd` goes on the
+  known list, next to the folder that cannot be entered, and the PR
+  body's two stale lines are fixed." Cost gate: "Delta review".
+- Ruling (Claude): the guard asks cygpath through bash, not directly;
+  why: the Windows CI job runs the guard from node, where Git's usr/bin
+  may not be on the path, while bash (which the suite already needs for
+  the commit scan) puts it there; cost if wrong: about 90 ms more per
+  distinct mount path (138 ms against 47 ms, measured once).
+- Ruling (Claude): two survivors of the mapping's mutants were dead and
+  went (glob characters in the mount test, since a glob path is cut
+  before it reaches it; the exit-status check beside the output check),
+  and the fallback to the written path is pinned by a test with no bash
+  on the path, as the owner's pick described ("the path stays unmapped,
+  as today"); cost if wrong: that fallback fails open where bash is
+  missing, which the hook itself never is.
 - Ruling (Claude): the owner's two rulings went into the private ledger
   as their own entries, committed that file alone and not pushed, since
   that checkout holds other sessions' unpushed commits; cost if wrong:
