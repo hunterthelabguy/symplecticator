@@ -119,6 +119,8 @@ test('git -C and cd reach the right repo; a repo with no origin HEAD falls back 
   refused(bash(`git -C "${REPO}" push origin trunk`, { cwd: OTHER }), 'trunk');
   refused(bash(`cd "${REPO}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
   refused(bash(`cd -- "${REPO}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
+  refused(bash(`cd -@ "${OTHER}"; git push origin trunk`), 'trunk');
+  refused(bash(`cd "${OTHER}" extra; git push origin trunk`), 'trunk');
   allowed(bash(`git -C "${REPO}" push origin feat`, { cwd: OTHER }));
   refused(bash('git -c core.x=y push origin trunk'), 'trunk');
   refused(bash('git --no-pager push origin trunk'), 'trunk');
@@ -329,10 +331,19 @@ test('Bash writes and removals in protected paths refused; the same elsewhere al
   refused(bash(`cd -L -P "${C}"; echo x > CLAUDE.md`), 'protected');
   refused(bash(`cd -Pe "${C}" && rm CLAUDE.md`), 'protected');
   refused(bash(`cd -- "${C}" && rm CLAUDE.md`), 'protected');
+  // A cd bash refuses moves nowhere, so the next command after ; runs in the old folder.
+  refused(bash(`cd -@ "${OTHER}"; rm CLAUDE.md`, { cwd: C }), 'protected');
+  refused(bash(`cd "${join(T, 'no-such-folder')}"; rm CLAUDE.md`, { cwd: C }), 'protected');
+  refused(bash(`cd "${OTHER}" extra; rm CLAUDE.md`, { cwd: C }), 'protected');
+  refused(bash(`cd "${join(C, 'scan-patterns.local')}"\nrm CLAUDE.md`, { cwd: C }), 'protected');
+  allowed(bash(`cd "${OTHER}"; rm CLAUDE.md`, { cwd: C }));
   refused(bash(`builtin cd "${C}" && rm CLAUDE.md`), 'protected');
   allowed(bash(`cd -P "${OTHER}" && rm CLAUDE.md`));
   // After an invalid option bash moves nowhere, so the folder stays.
   refused(bash(`cd -x "${OTHER}"; rm CLAUDE.md`, { cwd: C }), 'protected');
+  // Even when a folder of that name exists.
+  mkdirSync(join(C, '-x'));
+  try { refused(bash('cd -x; rm CLAUDE.md', { cwd: C }), 'protected'); } finally { rmSync(join(C, '-x'), { recursive: true }); }
   refused(bash('echo x > ${HOME}/.claude/CLAUDE.md'), 'protected');
   refused(bash('echo x | tee ~/.claude/scripts/a.sh'), 'protected');
   refused(bash('cp a.txt ~/.claude/scripts/a.sh'), 'protected');
