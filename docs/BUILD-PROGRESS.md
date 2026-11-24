@@ -23,9 +23,11 @@ do not exist on the base; T1, T2 and T3 create them.
 
 ## Agents
 
-Spawned: 22. Resumed: 20.
+Spawned: 23. Resumed: 20.
 
 ## Notes
+
+Clearing round 3 at 257bac3 (the last allowed): not cleared, 3 major. The run ends uncleared; the PR body, the report and the resume block carry the findings.
 
 Clearing round 2 at ae46512: not cleared (1 major). Fix landed as 56d2b68 on the owner ruling; clearing round 3 reviews it.
 
@@ -305,3 +307,15 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   refused), not deletion; why: the branch is right (bash rejects the
   option and stays, so the removal hits the config folder) and only the
   test was missing; cost if wrong: one test line and a fixture folder.
+- Correction (Claude): the earlier ruling that a cd joined by && moves
+  the guard's folder even to a folder that does not exist was wrong.
+  Its premise ("if the cd fails nothing after && runs") holds only to
+  the end of the && list; whatever follows a later ; or newline runs in
+  the old folder, so `cd <missing> && true; rm CLAUDE.md` from the
+  config folder gets through (clearing round 3, probed). Its stated cost
+  ("a refusal message names the wrong reason") was misstated: the real
+  cost is a removal of protected config getting through. The owner's
+  pick named "an existing folder at check time" with no && exception.
+- Ruling (Claude): the run ends uncleared after clearing round 3, the
+  third and last round the build allows, with its findings carried into
+  the PR body, the report and the resume block for the next session.

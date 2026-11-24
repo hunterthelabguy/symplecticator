@@ -20,7 +20,7 @@ Every plan task landed; none was parked.
 | Added: the guard compares real paths | aef35e1 | e7a77bd (replay of 3726301, body corrected) | 15 of 15 mutants killed; full verify green |
 | Simplify pass 1 | 50c8088 | 9d21343 | every check identical before and after; full verify green |
 | Clearing fix 1: the guard reads cd's options | 7656713 | replay of 2ad91b6 (body corrected) | every named mutant killed; full verify green |
-| Clearing fix 2: the guard follows only a cd bash takes | 56d2b68 | 0d0bd61 | 23 mutants killed at eight at once, the one survivor pinned; full verify green |
+| Clearing fix 2: the guard follows only a cd bash takes | 56d2b68 | 0d0bd61 | 22 named mutants at eight at once: 21 killed, k4 killed after its pin; full verify green |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -51,9 +51,9 @@ file as a known flake; it did not recur in the five later landing
 verifies. Cause
 unknown: the landing script cut the failed checks' detail lines.
 
-## Parked
+## Not cleared
 
-Nothing parked. One finding was held back from the batch for the owner
+The run ends uncleared: see Clearing review below. Nothing was parked. One finding was held back from the batch for the owner
 (below): a cd the guard cannot place.
 
 ## Final verify (at 56d2b68; later commits touch only docs)
@@ -66,8 +66,8 @@ perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 perturb-guard.test.mjs: tests 23, pass 23, fail 0, skipped 0
 ```
 
-CI at aef35e1 and every head after it through 1abb851: suites on
-ubuntu-latest and macos-latest, and guard-windows, all success.
+CI at aef35e1 and every first-parent head after it through 257bac3:
+suites on ubuntu-latest and macos-latest, and guard-windows, all success.
 
 ## Unverified
 
@@ -148,8 +148,25 @@ the fix in session, picking "Validate the cd (Recommended)" from
 Claude-drafted options: follow a cd only when bash would move. Landed
 as 56d2b68. On the owner's further word ("yes, take 1 and 2"), that
 fix had no separate task review: clearing round 3 reviews it with the
-whole diff, and mutants run up to eight at once. Round 3: see the PR
-body.
+whole diff, and mutants run up to eight at once.
+
+Round 3 at 257bac3, the last the build allows: not cleared, 3 major.
+A: the guard follows a `cd` joined by `&&` even to a folder that does
+not exist; that holds only to the end of the `&&` list, so
+`cd <missing> && true; rm CLAUDE.md` from the config folder gets
+through. This came from a controller ruling that departed from the
+owner's pick ("an existing folder at check time") and misstated its
+cost; it leaves round 2's finding open in that form. B: a `cd` ended by
+`||` is treated as moving nowhere, but in `cd X || exit; rm ...` the
+removal runs in X (present since the guard first landed; on no list).
+C: a test gap the last fix round made: the existing-folder check
+measured against the wrong base folder survives the suite, since every
+new test uses an absolute operand. Minor: the comment and a commit body
+say a lone `-` is not followed, but the guard follows it to a folder
+named `-`; and CDPATH, a glob operand, a quoted `~` and a folder moved
+earlier in the same call all resolve differently in bash. The fixes,
+with the round-3 reviewer's suggested tests, are in the resume block of
+the PR body.
 
 ## Trial: timed mutants four at a time
 
