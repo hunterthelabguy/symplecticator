@@ -385,7 +385,7 @@ Build everything in the scratch location first (see the rules):
    config, retention, cache window, resume check, trailer, versioned config,
    auto mode, and each step 7 decision. Form:
    `Ln. <topic>: "<verbatim reply>"`, then `Context (Claude): <the option text the reply selected, marked
-   Claude-drafted, or "free answer">`. Facts are not rulings and are never
+   Claude-drafted, or "free answer">`. Leave one blank line between entries. Facts are not rulings and are never
    quoted: Round 1 answers, the identity, the number of accounts, the plan
    type, and any private value.
 4. **Costs log**, only if the cost gate is on: `~/.claude/COSTS.md` with the
@@ -467,7 +467,9 @@ is the pass, so say so to the adopter.
   names its reason (for example, `gh` not signed in) and is not a failure.
   Report any FAIL line to the adopter as it is: until it is fixed,
   `/handoff`'s ground truth and `/build`'s close-out gate are not to be
-  trusted on this machine.
+  trusted on this machine. If Node is installed, also run
+  `node --test ~/.claude/scripts/ledger.test.mjs`; every test must pass.
+  Without Node the ledger script is unavailable; say so.
 
 A running session does not reload skills. Ask the adopter to open a new
 session and check that the skills appear.

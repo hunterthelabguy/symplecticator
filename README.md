@@ -92,7 +92,8 @@ Setup walks you through it, and you should read it yourself too.
 The scripts need bash (Git Bash on Windows, which Claude Code uses anyway),
 git 2.38 or later, and ssh for SSH remotes; their pull-request checks also
 need the GitHub CLI (`gh`), signed in. Setup checks git and `gh`, and runs
-the scripts' tests on your machine.
+the scripts' tests on your machine. The ledger script needs Node 18.13 or
+later; everything else works without Node.
 
 Setup looks at your existing `~/.claude` first, goes through the primer,
 asks four short rounds of questions (any of them can be skipped), shows you
@@ -127,6 +128,7 @@ restore from `~/.claude/setup-backups/`, using the list in
 | `writing-plans` | Turns an approved spec into a task plan, then builds its first tasks in a scratch copy to find what reading misses (the executing critique). |
 | `/build` | Executes a plan as a task graph ending in a draft pull request, with a resume block for the next session in its body; `/build overnight` runs it unattended once enabled. |
 | Ground truth (`scripts/`) | `ground-truth.sh` prints what is true in your repos right now, read from git and GitHub: pushed or not, merged or not, open pull requests with their CI and clearing-review verdicts. `/handoff` writes its block from it, and the next session runs it first. `/build`'s Stop hook and the optional resume hook rely on the same facts. |
+| Ledger (`scripts/`) | `ledger.mjs` keeps a decision ledger small. An index file beside `LEDGER.md` holds each ruling's status and the open items. The script checks that the two agree, reserves the next ruling number, settles rounds whose pull request has merged, and moves settled rulings to `LEDGER_SETTLED.md` with their text unchanged. `/handoff` runs its check once a ledger has an index: to give yours one, run `node ~/.claude/scripts/ledger.mjs init <prefix>` in the folder that holds `LEDGER.md`, where the prefix is the capital letter or letters your ruling numbers start with (`L` for `L12`). `init` marks every row `unclassified`; the index it writes says what each status means, and you set them by hand. It needs Node 18.13 or later. |
 | `tdd` | Test-first reference: where tests go, anti-patterns, how thick tests should be. |
 | `diagnosing-bugs` | A feedback-loop-first method for hard bugs. |
 | `verification-before-completion` | No claim of "done" or "passing" without a fresh run. |
