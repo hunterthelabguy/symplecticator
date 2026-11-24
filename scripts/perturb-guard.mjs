@@ -16,7 +16,7 @@
 // Fails closed: input it cannot read and any error it throws exit 2, since Claude Code lets a hook's other exit
 // codes through.
 
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync, statSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -433,15 +433,17 @@ function checkCommit(rest, repo, command) {
 // after it is refused.
 const KEEPS = new Set(['&&', ';', '\n', 'end']);
 const keepsCd = (toks) => !toks.sub && !toks.paren && KEEPS.has(toks.sep);
-// The folder a cd names: its options (-L, -P, -e, -@ and clusters of them) and a -- skipped. Any other word
-// starting with - is an invalid option, after which bash moves nowhere, so the folder stays.
+// The folder a cd names: its options (-L, -P, -e and clusters of them) and a -- skipped. Any other word of two or
+// more characters starting with - is an invalid option, and two operands are too many; after either bash moves
+// nowhere, so the folder stays. A bare cd (home) and a lone - (the previous folder) are not followed.
 function cdTarget(rest) {
   let i = 0;
-  while (/^-[LPe@]+$/.test(rest[i] ?? '')) i++;
+  while (/^-[LPe]+$/.test(rest[i] ?? '')) i++;
   if (rest[i] === '--') i++;
   else if (/^-./.test(rest[i] ?? '')) return '';
-  return rest[i] ?? '';
+  return rest.length - i === 1 ? rest[i] : '';
 }
+const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
 function bash(command, cwd) {
   const rules = protectedRules(cwd);
@@ -459,7 +461,13 @@ function bash(command, cwd) {
       if (hasGlob(t) ? globHits(t, cwd, rules) : holdsProtected(t, cwd, rules)) refuse(`a recursive copy to ${t}`, 'it is or holds protected config under /perturb');
     }
     const [cmd, ...rest] = words(toks);
-    if (cmd === 'cd' && keepsCd(toks)) { const d = cdTarget(rest); if (d) cwd = toPath(d, cwd); continue; }
+    // After a cd joined by &&, nothing runs if it fails; after ; or a newline the next command runs where bash
+    // stayed, so the folder moves only to one that exists.
+    if (cmd === 'cd' && keepsCd(toks)) {
+      const d = cdTarget(rest);
+      if (d && (toks.sep === '&&' || isDir(toPath(d, cwd)))) cwd = toPath(d, cwd);
+      continue;
+    }
     if (cmd === 'gh') {
       const g = rest.filter((a, i) => !/^(-R|--repo)$/.test(a) && !/^(-R|--repo)$/.test(rest[i - 1] ?? '') && !/^(-R.|--repo=)/.test(a));
       if (g[0] === 'pr' && g[1] === 'merge') refuse('gh pr merge', "merges are the owner's");
