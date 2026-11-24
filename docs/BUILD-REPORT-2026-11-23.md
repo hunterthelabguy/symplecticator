@@ -28,6 +28,7 @@ Every plan task landed; none was parked.
 | Round 6's fix: a cd behind a reserved word stops placing again | cebc1a8 (direct) | cebc1a8 | the restored line's mutant and three others killed at eight at once, no scan timeout; full verify green, 441 s |
 | Round 7's fix: Git Bash mount paths read through cygpath | 9c6a01e (direct) | 9c6a01e | the mapping's mutants all killed at eight at once after two dead conditions went, no scan timeout; full verify green, 436 s |
 | Round 8's fix: a drive-less path checked in both readings | b5dd93b (direct) | b5dd93b | this change's mutants killed at eight at once but one that only turns the cache off, no scan timeout; full verify green, 446 s |
+| Round 9's fix: the /tmp test runs under the TEMP it asks | 40ba2bc (direct) | 40ba2bc | guard suite 24 of 24 under a fresh msys runtime too; mutants killed, no scan timeout; full verify green |
 
 Fix rounds: the commit scan (three plan-test gaps), the showcase flag (an
 edge the plan's fixtures left open, and a branch named exactly `showcase`),
@@ -66,7 +67,7 @@ cannot place. A fresh session then fixed round 3's three majors and,
 on your rulings, that held finding; a fresh clearing review reads the
 result.
 
-## Final verify (the tree committed as b5dd93b; later commits touch only docs)
+## Final verify (the tree committed as 40ba2bc; later commits touch only docs)
 
 ```
 ground-truth.test.sh: all checks passed, 0 skipped
@@ -77,7 +78,7 @@ perturb-guard.test.mjs: tests 24, pass 24, fail 0, skipped 0
 perturb-hook.test.sh: perturb-hook.test.sh: all passed, 0 skipped
 ```
 
-446 s wall (436 s at 9c6a01e, 441 s at cebc1a8, 448 s at 2b7a132). CI at c84f450, the merge before it: suites on ubuntu-latest
+1110 s wall on a loaded machine (446 s at b5dd93b, 436 s at 9c6a01e, 441 s at cebc1a8, 448 s at 2b7a132). CI at c84f450, the merge before it: suites on ubuntu-latest
 and macos-latest, and guard-windows, all success; for later heads, see
 the PR's checks. CI at aef35e1 and every first-parent
 head after it through 5a8fc6e passed too; none ran at 32217aa, f9178c3
@@ -281,6 +282,17 @@ passed though Claude Code writes it on the current drive (rerun:
 mutant survivors got tests (`/tmp` alone, two mount paths in one call,
 the fallback); `/proc/self/cwd` after a `cd`, the `//localhost/C$`
 share and `..` across a mount root join the known misses.
+
+Round 9 at c29959a, a delta review attacking every guard input: not
+cleared, 1 blocker, 0 major, 2 minor, 2 nit. Round 8's major confirmed
+closed for Write, Edit, MultiEdit and NotebookEdit (420 tool-input
+probes, none reaching protected config). The blocker: the Windows CI
+job failed this session's new `/tmp` test, which asked `cygpath` under
+the suite's own TEMP and ran the guard under the fixture TEMP; on a
+fresh msys runtime `/tmp` follows TEMP (reproduced with a copied
+runtime). The test now runs the guard under the TEMP it asked; a test
+pins a drive-less Write through a junction (a survivor); a Bash path
+spelled `//?/C:/...` joins the known misses.
 
 ## Trial: timed mutants four at a time
 

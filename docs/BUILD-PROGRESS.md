@@ -448,6 +448,14 @@ Added task "Real paths": the pull request's first Windows CI run failed one guar
   cds; why: a regression of this session's own, repaired without a new
   rule; cost if wrong: an over-refusal where a drive-less path means
   different files to bash and to a tool.
+- Correction (Claude): the /tmp test added in the last fix asked cygpath
+  where /tmp is under the suite's own TEMP, then ran the guard under the
+  fixture TEMP; a fresh msys runtime (every CI runner) reads /tmp from
+  TEMP, so the Windows CI job failed it (the delta clearing review at
+  c29959a found it; the session reproduced it with a copied msys
+  runtime, and the fixed test passes there). Its commit body's claim
+  that the line skips with a diagnostic held only where /tmp is not the
+  temp folder.
 - Ruling (Claude): the owner's two rulings went into the private ledger
   as their own entries, committed that file alone and not pushed, since
   that checkout holds other sessions' unpushed commits; cost if wrong:
