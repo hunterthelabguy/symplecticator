@@ -159,7 +159,8 @@ owner's pick ("an existing folder at check time") and misstated its
 cost; it leaves round 2's finding open in that form. B: a `cd` ended by
 `||` is treated as moving nowhere, but in `cd X || exit; rm ...` the
 removal runs in X (present since the guard first landed; on no list).
-C: a test gap the last fix round made: the existing-folder check
+After the run the owner ruled B: check both folders. C: a test gap the
+last fix round made: the existing-folder check
 measured against the wrong base folder survives the suite, since every
 new test uses an absolute operand. Minor: the comment and a commit body
 say a lone `-` is not followed, but the guard follows it to a folder
