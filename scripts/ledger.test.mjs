@@ -229,6 +229,13 @@ test('check passes a ledger whose every entry has one row', (t) => {
   assert.match(run.stdout, /^note  R4: reserved$/m);
 });
 
+test('an index with no threshold-bytes line takes a threshold of 131072', (t) => {
+  const text = index('R', [['R1', 'standing']]).replace('- threshold-bytes: 131072\n', '');
+  assert.ok(!text.includes('threshold-bytes'));
+  const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': text });
+  assert.match(L.check(dir).notices.join('\n'), /^LEDGER\.md: \d+ bytes, threshold 131072$/m);
+});
+
 test('check names each kind of break', (t) => {
   const base = { 'LEDGER.md': ledger('R1', 'R3'), 'LEDGER_SETTLED.md': ledger('R2') };
   const rows = [['R1', 'standing'], ['R2', 'settled', 'LEDGER_SETTLED.md'], ['R3', 'round']];
@@ -489,6 +496,31 @@ test('next refuses while another holds the lock, and names its age', (t) => {
   refuses(() => L.next(dir, { waitMs: 0 }), /^next: the lock .*ledger-next\.lock is \d+ s old; remove it by hand/);
   assert.equal(get(dir, 'LEDGER_INDEX.md'), before);
   assert.ok(fs.existsSync(at(dir, LOCK)));
+});
+
+test('next and merged wait for the lock up to 10 seconds, then refuse', (t) => {
+  // The clock reads 9,999 ms after the start, then 10,000, then much later; a held lock is waited on while the
+  // clock is short of 10,000 ms, so each command waits exactly once before it refuses.
+  const runs = [['next', (dir) => L.next(dir)], ['merged', (dir) => L.merged(dir, { prState: () => 'MERGED' })]];
+  for (const [name, run] of runs) {
+    const dir = repo(t, { 'LEDGER.md': ledger('R1'), 'LEDGER_INDEX.md': index('R', [['R1', 'standing']]) });
+    fs.mkdirSync(at(dir, LOCK));
+    const { now } = Date;
+    const { wait } = Atomics;
+    const start = now();
+    const clock = [start, start + 9999, start + 10000];
+    let reads = 0;
+    let waits = 0;
+    Date.now = () => clock[reads++] ?? start + 1000000;
+    Atomics.wait = () => { waits += 1; return 'timed-out'; };
+    try {
+      refuses(() => run(dir), new RegExp(`^${name}: the lock .*ledger-next\\.lock is \\d+ s old`));
+    } finally {
+      Date.now = now;
+      Atomics.wait = wait;
+    }
+    assert.equal(waits, 1, name);
+  }
 });
 
 test('next takes EPERM from making the lock as the lock held, and refuses when it lasts', (t) => {
