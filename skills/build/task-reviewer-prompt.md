@@ -95,8 +95,14 @@ Subagent (general-purpose):
     unpinned, Minor otherwise. Where the spec states a rule and then lists
     cases, aim one mutant at the rule outside its listed cases (a signed
     value, a neighbouring form): tests that check only the listed cases
-    leave the rule unpinned. Stop any test workers a timeout leaves
-    running, by their own process id.
+    leave the rule unpinned. For each number the spec states that the
+    task's code compares against (a limit or a count the spec names, such
+    as "the row limit"), aim one mutant at the operator (`>` to `>=`) and
+    move the constant one up and one down (`rows` to `rows + 1` and to
+    `rows - 1`): tests that sit only far from the threshold leave it
+    unpinned (seen in a past build: both clearing majors sat at a stated
+    threshold no task review aimed at). Stop any
+    test workers a timeout leaves running, by their own process id.
 
     Warnings or other noise in the implementer's reported test output are
     findings; test output should be pristine.
