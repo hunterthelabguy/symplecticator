@@ -243,7 +243,11 @@ preflight so that it is the owner's choice and never the controller's.
   a reader's model of it. The check is a generator of inputs, each run
   through the real program in a throwaway folder and through the code,
   with one invariant stated one way (for a guard: what the program was
-  harmed by, the code refused). It is a test file in the repository from
+  harmed by, the code refused). Generated inputs that run in a real
+  shell are held inside that folder by construction, with a test that a
+  file beside the folder the run started from survives (the first
+  version of one such generator followed `cd -` out of its sandbox and
+  removed a tracked file). It is a test file in the repository from
   the task that first needs it, never a script in an agent's scratch
   folder: a probe that is thrown away is paid for again by the next
   review, and the review after that (clearing-review example C6).

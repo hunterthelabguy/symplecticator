@@ -18,7 +18,8 @@
 //   --guard  the guard to ask (default: perturb-guard.mjs beside this file); an older copy replays history.
 //   --replay an older guard to ask about the same harmful commands, after the first; may repeat.
 //   --known  also generate the forms the guard's own list of misses names (bare cd, pushd, popd, cd -).
-// Exit 0 = no violation; 1 = at least one, each printed shortest first; 2 = the oracle could not run.
+// Exit 0 = no violation; 1 = at least one, each printed shortest first, or a command that left the sandbox (it
+// is stopped before it acts there); 2 = the oracle could not run.
 // Needs bash and git on PATH. Exports run() for the test beside it.
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -51,18 +52,31 @@ function sh(cwd, env, cmd, ...args) {
   return r.stdout.trim();
 }
 
-// T/w/x/y holds everything, three folders deep, so a generated chain of `cd ..` stays inside T.
+// Containment. A generated command runs in real bash, so it must not be able to act outside the sandbox T.
+// Three things hold that, each alone enough for the forms generated today:
+// - depth: everything sits DEPTH folders below T, and a command with more than MAX_UPS `..` in it is dropped,
+//   so no chain of `cd ..` (and a payload's `../`) climbs out of T;
+// - the launch folder: the driver runs from a folder at that same depth, so `cd -` (bash's OLDPWD) lands
+//   there, not in the folder this script was started from;
+// - a tripwire: a DEBUG trap, inherited by functions and subshells, runs before every command of a case and
+//   ends that shell if its folder is not under T, before the command runs. A case it ended is counted as left.
+// The first version had none of the three in full: run with --known from a repository's root, its `cd -`
+// followed OLDPWD there and `rm CLAUDE.md` removed that repository's own file.
+const DEPTH = 8;
+const MAX_UPS = 6;
 export function makeSandbox() {
   const T = fwd(realpathSync.native(mkdtempSync(join(tmpdir(), 'guard-oracle-'))));
-  const Y = `${T}/w/x/y`;
+  const Y = `${T}/${Array.from({ length: DEPTH }, (_, i) => `d${i + 1}`).join('/')}`;
   const s = { T, Y, home: `${Y}/home`, C: `${Y}/home/.claude`, O: `${Y}/other`, R1: `${Y}/r1`, R2: `${Y}/r2`,
     M: `${Y}/missing`, F: `${Y}/file`, bin: `${T}/fakebin`, where: `${T}/where`, cases: `${T}/cases` };
-  for (const d of [s.C, s.O, s.bin, s.cases]) mkdirSync(d, { recursive: true });
+  s.launch = `${Y}/launch`;
+  for (const d of [s.C, s.O, s.bin, s.cases, s.launch]) mkdirSync(d, { recursive: true });
   for (const d of [s.C, s.O]) mkdirSync(`${d}/sub`);
   writeFileSync(s.F, 'a file, not a folder\n');
   s.env = { ...process.env, HOME: s.home, USERPROFILE: s.home, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't',
     GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't', GIT_CONFIG_NOSYSTEM: '1', GIT_CEILING_DIRECTORIES: T };
   delete s.env.CDPATH;
+  delete s.env.OLDPWD;
   // r1 has the default branch (trunk) checked out, r2 a feature branch; both push to one bare origin.
   sh(Y, s.env, 'git', 'init', '-q', '--bare', 'origin.git');
   sh(Y, s.env, 'git', 'init', '-q', 'r1');
@@ -97,11 +111,22 @@ export function makeSandbox() {
 // The bash side. For each case file: put the canaries back, run the case from its start folder in a subshell,
 // wait for what it left in the background, and print <index> <1 if the canary is damaged> <where git ran>.
 const DRIVER = `#!/usr/bin/env bash
-# usage: driver.sh <sandbox> <from> <to>
+# usage: driver.sh <sandbox> <from> <to>, run from the launch folder, with ORACLE_Y the folder that holds the rest
 T=$1
-C="$T/w/x/y/home/.claude"
-O="$T/w/x/y/other"
+C="$ORACLE_Y/home/.claude"
+O="$ORACLE_Y/other"
 export ORACLE_WHERE="$T/where"
+LEFT="$T/left"
+# The sandbox in every spelling bash may give its folder after a generated cd: as bash itself prints it, and
+# each spelling the generator uses (ORACLE_IN, one a line: on Windows the /c/ form and the mount form).
+INS=("$(cd "$T" && pwd)" "$(cd "$T" && pwd -P)")
+while IFS= read -r line; do [ -n "$line" ] && INS+=("$line"); done <<<"$ORACLE_IN"
+inside() {
+  local p
+  for p in "\${INS[@]}"; do case $PWD in "$p" | "$p"/*) return 0 ;; esac; done
+  return 1
+}
+inside || { echo "the driver itself was not started inside the sandbox" >&2; exit 4; }
 # In bash's own spelling: on Windows a C:/ entry would split at its colon and the stand-in would never be found.
 PATH="$(cd "$T/fakebin" && pwd):$PATH"
 [ "$(command -v git)" = "$(cd "$T/fakebin" && pwd)/git" ] || { echo "the stand-in git is not first on PATH" >&2; exit 3; }
@@ -111,10 +136,16 @@ for ((i = $2; i < $3; i++)); do
   printf 'canary\\n' >"$C/CLAUDE.md"
   printf 'plain\\n' >"$O/CLAUDE.md"
   : >"$ORACLE_WHERE"
-  ( cd "$start" && { . "$f"; wait; } ) </dev/null >/dev/null 2>&1
+  : >"$LEFT"
+  ( cd "$start" && {
+      set -o functrace
+      trap 'inside || { echo left >"$LEFT"; exit 97; }' DEBUG
+      . "$f"
+      wait
+    } ) </dev/null >/dev/null 2>&1
   dmg=0
   { [ -f "$C/CLAUDE.md" ] && [ "$(<"$C/CLAUDE.md")" = canary ]; } || dmg=1
-  printf '%s\\t%s\\t%s\\n' "$i" "$dmg" "$(<"$ORACLE_WHERE")"
+  printf '%s\\t%s\\t%s\\t%s\\n' "$i" "$dmg" "$(<"$ORACLE_WHERE")" "$(<"$LEFT")"
 done
 `;
 
@@ -258,11 +289,13 @@ function runBash(s, cases) {
   const CHUNK = 200;
   for (let from = 0; from < cases.length; from += CHUNK) {
     const to = Math.min(cases.length, from + CHUNK);
-    const r = spawnSync('bash', [`${s.T}/driver.sh`, s.T, String(from), String(to)], { env: s.env, encoding: 'utf8', timeout: 300000 });
+    const r = spawnSync('bash', [`${s.T}/driver.sh`, s.T, String(from), String(to)],
+      { cwd: s.launch, env: { ...s.env, ORACLE_Y: s.Y, ORACLE_IN: s.spell(s.T).join('\n') }, encoding: 'utf8', timeout: 300000 });
     for (const line of (r.stdout || '').split('\n')) {
-      const [i, dmg, where] = line.split('\t');
+      const [i, dmg, where, left] = line.split('\t');
       if (!/^\d+$/.test(i)) continue;
       cases[Number(i)].harm = dmg === '1' || where === 'danger';
+      cases[Number(i)].left = left === 'left';
       cases[Number(i)].ran = true;
     }
     if (r.error || r.status !== 0) {
@@ -294,14 +327,15 @@ function askGuard(s, guard, cases, jobs = 8) {
 
 // Generate, run in bash, ask the guard about every case bash was harmed by (and, with all, the rest too).
 export async function run({ n = 400, seed = 1, guard = join(HERE, 'perturb-guard.mjs'), known = false, all = false,
-  exhaust = true, wide = true, keep = false, sandbox = null, replay = [] } = {}) {
+  exhaust = true, wide = true, keep = false, sandbox = null, replay = [], extra = [] } = {}) {
   const s = sandbox ?? makeSandbox();
   try {
     const g = grammar(s, prng(seed), { known });
     const cases = exhaust ? exhaustive(s, { known, wide }) : [];
     for (let i = 0; i < n; i++) cases.push(i % 3 === 2 ? g.push() : g.rm());
     const seen = new Set();
-    const unique = cases.filter((c) => { const k = `${c.start}\n${c.command}`; return !seen.has(k) && seen.add(k); });
+    const ups = (c) => (c.command.match(/\.\./g) ?? []).length;
+    const unique = [...cases, ...(typeof extra === 'function' ? extra(s) : extra)].filter((c) => { const k = `${c.start}\n${c.command}`; return (c.escape || ups(c) <= MAX_UPS) && !seen.has(k) && seen.add(k); });
     runBash(s, unique);
     const writes = toolCases(s);
     runWrites(s, writes);
@@ -323,7 +357,7 @@ export async function run({ n = 400, seed = 1, guard = join(HERE, 'perturb-guard
     const families = {};
     for (const c of harmful) families[c.family] = (families[c.family] ?? 0) + 1;
     return { history, families, cases: unique.length, harmful: harmful.length, violations: violations.map(tidy), harmless: unique.length - harmful.length,
-      strict, undecided: unique.filter((c) => c.verdict === 'undecided').length, all: all ? unique.map(tidy) : undefined };
+      strict, left: unique.filter((c) => c.left).map(tidy), undecided: unique.filter((c) => c.verdict === 'undecided').length, all: all ? unique.map(tidy) : undefined };
   } finally {
     if (!keep && !sandbox) rmSync(s.T, { recursive: true, force: true });
   }
@@ -353,10 +387,11 @@ async function main(argv) {
   if (json) writeFileSync(json, JSON.stringify(r, null, 1));
   console.log(`guard-oracle: ${r.cases} commands run in bash, ${r.harmful} did harm (${Object.entries(r.families).map(([k, v]) => `${k} ${v}`).join(', ')}), ${r.violations.length} of those the guard let through`
     + (r.strict === null ? '' : `; of ${r.harmless} harmless ones it refused ${r.strict}`) + ` (${Math.round((Date.now() - t0) / 1000)} s, seed ${opt.seed})`);
+  for (const v of r.left) console.log(`  LEFT THE SANDBOX, and was stopped there [from ${v.from}]: ${JSON.stringify(v.command)}`);
   for (const v of r.violations.slice(0, 40)) console.log(`  LET THROUGH [${v.family}, from ${v.from}]: ${JSON.stringify(v.command)}`);
   if (r.violations.length > 40) console.log(`  ... and ${r.violations.length - 40} more`);
   for (const h of r.history) console.log(`  replay ${h.guard}: ${h.violations.length} of the ${r.harmful} let through`);
-  return r.violations.length ? 1 : 0;
+  return r.violations.length || r.left.length ? 1 : 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
