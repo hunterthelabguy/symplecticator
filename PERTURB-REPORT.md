@@ -448,8 +448,14 @@ what would have bounded it sooner is a check that needs no reviewer.
 
 ## 7. Count
 
-Rulings asked of the owner: 1; made by Claude: 20
+Rulings asked of the owner: 2; made by Claude: 20
 
-The one asked and answered: "Go" to the branch name, at preflight. A
-second question, on ruling 18's changes, is put to the owner as this
-report is committed; its answer is added below when it comes.
+1. At preflight, to "Go, on the branch showcase/2026-11-25-self-audit
+   (cut from c3314b9 in this worktree, pushed, never merged)?", the owner
+   picked "Go" (option text Claude-drafted).
+2. After the work was pushed, on ruling 18's four changes, to "Which stay
+   on the branch for you to mine? I revert any you leave unticked.", the
+   owner picked all four: "Setup step 10,Addendum line,README and
+   verify,Build skill rules" (option labels Claude-drafted). So all four
+   stay on the branch. That is a ruling on what the showcase holds, not a
+   word to land any of it.
