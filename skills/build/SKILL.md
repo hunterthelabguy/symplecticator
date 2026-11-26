@@ -101,8 +101,9 @@ For each frontier task, up to 4 at once (a default, not a law):
    committing (every review after the first few has found one or two false
    sentences, and none after this instruction was a false claim that
    landed); report what was built, the Verify command's output, and any
-   concern. The brief also says: start no background process, run in the
-   foreground, and finish with one report (seen in a past build: an
+   concern. The brief also says: start no background process it does not
+   stop before reporting, and end each run with one report; a quiet-phase
+   stop or a fix round resumes it for the next (seen in a past build: an
    implementer stopped with background work running and re-sent its
    report four times until the controller stopped it).
    The controller also reads the plan's commit body for the task sentence by
