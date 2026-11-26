@@ -63,7 +63,7 @@ test('the oracle stays in its sandbox: a file in the folder it was started from 
 });
 test('bash is harmed by enough of the generated commands for the check to mean something', { skip }, () => {
   assert.ok(result.harmful >= 100, `only ${result.harmful} of ${result.cases} commands did harm`);
-  // Each family on its own: one that harms nothing checks nothing (a stand-in git that is not on PATH, say).
+  // Each family on its own: one that harms nothing checks nothing (a push family whose stand-in git's report is lost, say).
   for (const family of ['rm', 'push', 'write']) {
     assert.ok(result.families[family] >= 10, `the ${family} family did harm ${result.families[family] ?? 0} times`);
   }

@@ -10,7 +10,8 @@
 // One invariant, checked one way: a command that damaged the canary, or ran its push where the default branch
 // is checked out, must have been refused. A refusal of a harmless command is counted, not failed: the guard is
 // allowed to be strict. The canary lives in a throwaway home; generated commands name paths only inside the
-// sandbox, and the payloads are `rm CLAUDE.md`, a redirect to it, and `git push origin HEAD` with a stand-in
+// sandbox (on Windows the write family's own node writes also try /c/ spellings, which node resolves under C:c,
+// a folder that cannot exist, so those writes fail and touch nothing), and the payloads are `rm CLAUDE.md`, a redirect to it, and `git push origin HEAD` with a stand-in
 // git first on PATH (it records its folder and pushes nothing).
 //
 // Usage: node scripts/guard-oracle.mjs [--n <random cases>] [--seed <n>] [--guard <path>] [--json <file>]
