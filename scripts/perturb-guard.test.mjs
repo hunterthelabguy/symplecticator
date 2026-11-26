@@ -122,7 +122,8 @@ test('git -C and cd reach the right repo; a repo with no origin HEAD falls back 
   refused(bash(`cd "${REPO}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
   refused(bash(`cd -- "${REPO}" && git push origin trunk`, { cwd: OTHER }), 'trunk');
   refused(bash(`cd -@ "${OTHER}"; git push origin trunk`), 'trunk');
-  refused(bash(`cd "${OTHER}" extra; git push origin trunk`), 'trunk');
+  // Bash 5 stays and bash 3.2 moves to OTHER, so the push has two folders.
+  refused(bash(`cd "${OTHER}" extra; git push origin trunk`), 'cannot place');
   allowed(bash(`git -C "${REPO}" push origin feat`, { cwd: OTHER }));
   refused(bash('git -c core.x=y push origin trunk'), 'trunk');
   refused(bash('git --no-pager push origin trunk'), 'trunk');
@@ -433,6 +434,11 @@ test('writes and removals are checked in every folder a cd names; a push or comm
       `{ cd "${OTHER}"; } | cat; rm CLAUDE.md`, `cd "${OTHER}" && true & cd cd-sub; rm ../CLAUDE.md`]) {
       refused(bash(c, { cwd: C }), 'protected');
     }
+    // A cd with two operands: bash 5 refuses it and stays, bash 3.2 (macOS's stock bash) moves to the first, so the
+    // first is checked beside the old folder (the oracle's first macOS run let the builtin form through).
+    refused(bash(`builtin cd "${C}" "${C}"; echo x > CLAUDE.md`, { cwd: OTHER }), 'protected');
+    refused(bash(`cd "${C}" extra; rm CLAUDE.md`, { cwd: OTHER }), 'protected');
+    allowed(bash(`cd "${OTHER}" extra; rm CLAUDE.md`));
     // A cd ended by | or & runs in a shell bash throws away, so its folder is not added.
     allowed(bash(`cd "${C}" | true; rm CLAUDE.md`));
     allowed(bash(`cd "${C}" & rm CLAUDE.md`));
@@ -442,6 +448,8 @@ test('writes and removals are checked in every folder a cd names; a push or comm
     allowed(bash(`{ cd "${REPO}"; git push origin feat; }`, { cwd: OTHER }));
     for (const w of ['command', 'time']) allowed(bash(`${w} cd "${REPO}"; git push origin feat`, { cwd: OTHER }));
     refused(bash(`cd "${missing}" && cd "${REPO}" && git push origin feat`, { cwd: OTHER }), 'cannot place');
+    // Bash may or may not move on a cd with two operands, so a push after one has two folders.
+    refused(bash(`cd "${REPO}" "${REPO}"; git push origin feat`, { cwd: OTHER }), 'cannot place');
     refused(bash(`if ! cd "${REPO}"; then git push origin feat; fi`, { cwd: OTHER }), 'cannot place');
     // After ! cd that moved, bash skips what && joins, so a cd after it cannot place a push.
     refused(bash(`! cd "${REPO}" && cd "${OTHER}"; git push origin feat`, { cwd: T }), 'cannot place');
