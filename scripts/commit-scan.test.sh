@@ -79,6 +79,21 @@ run "$T/out" "$T/repo"; code=$?
 check "untracked file with a hit: not reported" empty "$T/out"
 rm loose.txt
 
+# A tracked file's name leaves with the commit like its lines do.
+echo "nothing" >notes-Zanzibar.txt && git add notes-Zanzibar.txt
+mkdir "qwopler dir" && echo "nothing" >"qwopler dir/in.txt" && git add "qwopler dir"
+run "$T/out" "$T/repo"; code=$?
+check "a staged file's name: exit 1" [ "$code" = 1 ]
+check "a staged file's name: the path, under its rule's label" has "$T/out" "notes-Zanzibar.txt: (file name)"
+check "a staged file's name: listed once" once "$T/out" "notes-Zanzibar.txt"
+check "a folder's name counts: the whole path" has "$T/out" "qwopler dir/in.txt: (file name)"
+check "a staged file's name: the clean names are not listed" lacks "$T/out" "clean.txt"
+git rm -q -r -f --cached notes-Zanzibar.txt "qwopler dir" && rm -r notes-Zanzibar.txt "qwopler dir"
+echo "nothing" >loose-zanzibar.txt
+run "$T/out" "$T/repo"; code=$?
+check "an untracked file's name: not reported" empty "$T/out"
+rm loose-zanzibar.txt
+
 printf 'subject\n\nsigned zanzibar\nzanzibar again\n' >"$T/msg.txt"
 run "$T/out" "$T/repo" "$T/msg.txt"; code=$?
 check "message file, absolute path: exit 1" [ "$code" = 1 ]

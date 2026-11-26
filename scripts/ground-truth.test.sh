@@ -44,6 +44,20 @@ green() { [ "$2" = 0 ] && has "$1" "$3"; } # <file> <exit code> <text>: answered
 red() { [ "$2" = 2 ] && has "$1" "$3"; }   # <file> <exit code> <text>: a failed probe, exit 2 and its UNKNOWN line
 same() { [ -n "$1" ] && [ "$1" = "$2" ]; } # <text> <text>: equal, and not both empty
 git_q() { git "$@" >/dev/null 2>&1; }
+# Remove one loose object and prove git can no longer read it. A fixture that kept its object (the file held open
+# by another process when rm ran, or the object in a pack) leaves the checks after it failing with no cause in
+# sight; this one names it: exit 3 = not a loose object, 4 = rm could not remove it, 5 = git still reads it.
+drop_object() { # <repo> <object id>
+  local f="$1/.git/objects/${2:0:2}/${2:2}" n=0
+  [ -f "$f" ] || return 3
+  while [ -e "$f" ] && [ "$n" -lt 10 ]; do
+    rm -f "$f" 2>/dev/null || sleep 1
+    n=$((n + 1))
+  done
+  [ ! -e "$f" ] || return 4
+  [ "$n" -le 1 ] || echo "note  removing object ${2:0:9} took $n tries"
+  ! git -C "$1" cat-file -e "$2" 2>/dev/null || return 5
+}
 run() { # <output file> <args...>: run the script, keep its output, return its exit code
   local out=$1
   shift
@@ -222,7 +236,7 @@ check "a non-GitHub host: a finding, named, not UNKNOWN" \
 # A probe git cannot answer: the blob that landed and its rebased copy share is gone, so git cherry fails (it
 # reads blobs only when two patches touch the same paths) while ancestry still answers.
 obj=$(git -C repo rev-parse landed:a.txt)
-rm -f "repo/.git/objects/${obj:0:2}/${obj:2}"
+check "fixture: the landed blob is gone" drop_object repo "$obj"
 PATH="$T/bin:$PATH" run "$T/gt-cherry.txt" --no-fetch "$T/repo"
 rc=$?
 check "git cherry cannot run: UNKNOWN" ends "$T/gt-cherry.txt" "[landed-wt]: UNKNOWN: git cherry or patch-id failed"
@@ -285,7 +299,8 @@ check "main merged into a landed branch: merged, not LOCAL ONLY" \
 # A blob only patch comparisons read, gone: pf's pushed copy and its copy on main touch the same path, so git cherry
 # reads it and fails, on pq after printing a line for pq's first commit. pb's, ws's, blank's and rw's tips pass git
 # cherry but not the verbatim check, which reads every patch on main past them.
-obj=$(git -C lr rev-parse origin/pf:r.txt) && rm -f "lr/.git/objects/${obj:0:2}/${obj:2}"
+obj=$(git -C lr rev-parse origin/pf:r.txt)
+check "fixture: the pushed copy's blob is gone" drop_object lr "$obj"
 run "$T/gt-lr-gone.txt" --no-fetch "$T/lr"
 rc=$?
 check "pushed copy cannot be compared: UNKNOWN" line "$T/gt-lr-gone.txt" "    pf: UNKNOWN: git cherry or patch-id failed"

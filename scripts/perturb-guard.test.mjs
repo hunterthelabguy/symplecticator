@@ -456,6 +456,94 @@ test('writes and removals are checked in every folder a cd names; a push or comm
     rmSync(join(REPO, 'sub'), { recursive: true });
   }
 });
+test('push: the commits it would send are scanned, however they were made', () => {
+  // A commit git made without the guard seeing a git commit (a cherry-pick, git am, a merge, a script): its
+  // message, its identity, a file's name and a line a later commit took out again all leave with the push.
+  const made = (branch, fn) => {
+    git(REPO, 'checkout', '-q', '-b', branch, 'trunk');
+    try { fn(); } finally { git(REPO, 'checkout', '-q', 'trunk'); }
+  };
+  const commit = (name, text, message, extra = {}) => {
+    writeFileSync(join(REPO, name), text);
+    git(REPO, 'add', name);
+    const r = spawnSync('git', ['commit', '-qm', message], { cwd: REPO, env: { ...env, ...extra }, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+  };
+  try {
+    made('out-clean', () => commit('c1.txt', 'clean\n', 'a clean commit'));
+    allowed(bash('git push origin out-clean'));
+    made('out-message', () => commit('c2.txt', 'clean\n', 'picked from zanzibar'));
+    refused(bash('git push origin out-message'), 'picked from zanzibar');
+    refused(bash('git push origin out-message:refs/heads/elsewhere'), 'zanzibar');
+    refused(bash('git push -u origin out-message 2>&1'), 'zanzibar');
+    made('out-ident', () => commit('c3.txt', 'clean\n', 'clean', { GIT_AUTHOR_EMAIL: 'zanzibar@example.com' }));
+    refused(bash('git push origin out-ident'), 'zanzibar@example.com');
+    made('out-name', () => commit('zanzibar-notes.txt', 'clean\n', 'clean'));
+    // The name is gone from the index by now, so only the outgoing commit carries it.
+    refused(bash('git push origin out-name'), 'zanzibar-notes.txt');
+    made('out-history', () => {
+      commit('c4.txt', 'zanzibar\n', 'add a line');
+      commit('c4.txt', 'clean\n', 'take the line out again');
+    });
+    refused(bash('git push origin out-history'), '+zanzibar');
+    // With no refspec the current branch is what leaves.
+    git(REPO, 'checkout', '-q', 'out-message');
+    try { refused(bash('git push'), 'zanzibar'); refused(bash('git push origin HEAD'), 'zanzibar'); } finally { git(REPO, 'checkout', '-q', 'trunk'); }
+    // What the remote already holds is not sent, so not scanned again: only the clean commit on top is.
+    git(REPO, 'push', '-q', 'origin', 'out-message');
+    made('out-top', () => { git(REPO, 'reset', '-q', '--hard', 'out-message'); commit('c5.txt', 'clean\n', 'clean on top'); });
+    allowed(bash('git push origin out-top'));
+    // A deletion sends no commit; a branch that does not exist sends none either (git itself refuses it).
+    allowed(bash('git push origin --delete showcase/2026-11-01-old'));
+    allowed(bash('git push origin no-such-branch'));
+    assert.deepEqual(readdirSync(TMP), []);
+  } finally {
+    for (const b of ['out-clean', 'out-message', 'out-ident', 'out-name', 'out-history', 'out-top']) {
+      spawnSync('git', ['branch', '-q', '-D', b], { cwd: REPO, env });
+    }
+    spawnSync('git', ['push', '-q', 'origin', '--delete', 'out-message'], { cwd: REPO, env });
+    spawnSync('git', ['clean', '-qfd'], { cwd: REPO, env });
+  }
+});
+test('push: an outgoing scan that does not finish in time refuses', () => {
+  const slow = join(T, 'slow-push');
+  mkdirSync(slow, { recursive: true });
+  copyFileSync(GUARD, join(slow, 'perturb-guard.mjs'));
+  writeFileSync(join(slow, 'commit-scan.sh'), 'sleep 3\n');
+  git(REPO, 'checkout', '-q', '-b', 'out-slow', 'trunk');
+  try {
+    writeFileSync(join(REPO, 's.txt'), 'clean\n');
+    git(REPO, 'add', 's.txt');
+    git(REPO, 'commit', '-qm', 'clean');
+    refused(bash('git push origin out-slow', { guard: join(slow, 'perturb-guard.mjs'), extraEnv: { PERTURB_SCAN_TIMEOUT_MS: '500' } }),
+      'did not finish');
+  } finally { git(REPO, 'checkout', '-q', 'trunk'); git(REPO, 'branch', '-q', '-D', 'out-slow'); }
+});
+test('commit: the identity git would write is scanned', () => {
+  refused(bash('git commit -m clean', { extraEnv: { GIT_AUTHOR_EMAIL: 'zanzibar@example.com' } }), 'zanzibar@example.com');
+  refused(bash('git commit -m clean', { extraEnv: { GIT_COMMITTER_NAME: 'Zanzibar' } }), 'Zanzibar');
+  allowed(bash('git commit -m clean', { extraEnv: { GIT_AUTHOR_EMAIL: 'someone@example.com' } }));
+});
+test('a function written with the function keyword is read like any other', () => {
+  refused(bash('function f { git push origin trunk; }; f'), 'trunk');
+  // With parentheses the keyword and name end a command of their own, so the push comes after another command.
+  refused(bash('function f() { git push origin trunk; }; f'), 'after another command');
+  refused(bash('function f { rm ~/.claude/CLAUDE.md; }; f'), 'protected');
+  allowed(bash('function f { git push origin feat; }'));
+});
+test('a bare cd names the home folder and pushd names its folder, for writes and removals', () => {
+  refused(bash('cd; cd .claude; rm CLAUDE.md'), 'protected');
+  refused(bash('cd && rm .claude/CLAUDE.md'), 'protected');
+  refused(bash('cd; echo x > .claude/settings.json'), 'protected');
+  refused(bash('pushd "' + C + '"; rm CLAUDE.md'), 'protected');
+  refused(bash('pushd "' + C + '" && echo x > settings.json; popd'), 'protected');
+  refused(bash('pushd "' + HOME + '"; cd .claude; rm CLAUDE.md'), 'protected');
+  allowed(bash('cd; rm CLAUDE.md'));
+  allowed(bash('pushd "' + OTHER + '"; rm CLAUDE.md; popd'));
+  // Neither places a push or commit: pushd is a command like any other, and the home folder is the guard's guess.
+  refused(bash('pushd "' + REPO + '"; git push origin feat', { cwd: OTHER }), 'after another command');
+  refused(bash('cd; git push origin feat'), 'cannot place');
+});
 test('only the safe tools pass: Agent, Workflow, the other shells, auto-merge, session tools and the rest refused', () => {
   for (const t of ['Agent', 'Task', 'Workflow', 'PowerShell', 'Monitor', 'mcp__terminal__run_in_terminal',
     'mcp__ccd_pr__set_auto_merge', 'mcp__ccd_session__start_session', 'mcp__ccd_session__hand_off_to_session',
@@ -465,7 +553,7 @@ test('only the safe tools pass: Agent, Workflow, the other shells, auto-merge, s
   refused(run('Skill', { skill: 'build' }), 'build');
   allowed(run('Skill', { skill: 'frames' }));
   allowed(run('Read', { file_path: join(C, 'settings.json') }));
-  for (const t of ['Grep', 'Glob', 'TodoWrite', 'AskUserQuestion', 'ToolSearch', 'WebSearch', 'WebFetch',
+  for (const t of ['Grep', 'Glob', 'TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'AskUserQuestion', 'ToolSearch', 'WebSearch', 'WebFetch',
     'mcp__ccd_turn__update_plan', 'mcp__ccd_turn__wrap_up']) {
     allowed(run(t, { pattern: 'x' }));
   }

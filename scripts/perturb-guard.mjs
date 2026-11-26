@@ -12,13 +12,16 @@
 // runs), a push or commit after a cd the guard cannot place or where git cannot answer, and a call with a quote or
 // substitution left open.
 // Paths compare in both their written and their real spelling (8.3 names, junctions and symlinks resolved). Before
-// every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file and the raw command.
+// every other git commit it runs commit-scan.sh beside it, on the parsed messages, any -F file, the raw command and
+// the author and committer git would write. Before every other push it runs the same scan on the commits the push
+// would send (messages, identities, file names, changes), since git makes commits the guard never saw as a git
+// commit: a cherry-pick, git am, a merge, a script.
 // It is a tripwire, not a sandbox: a script Claude writes can still push or write anywhere.
 //
 // Fails closed: input it cannot read and any error it throws exit 2, since Claude Code lets a hook's other exit
 // codes through.
 
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, realpathSync, statSync, openSync, closeSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -45,6 +48,8 @@ const SAFE = {
   Bash: 'bash',
   Skill: 'skill',
   TodoWrite: 'free', AskUserQuestion: 'free', ToolSearch: 'free', WebSearch: 'free', WebFetch: 'free',
+  // The task list the CLI keeps where it once had TodoWrite: it changes no file and runs nothing.
+  TaskCreate: 'free', TaskUpdate: 'free', TaskList: 'free', TaskGet: 'free',
   mcp__ccd_turn__update_plan: 'free', mcp__ccd_turn__wrap_up: 'free',
   mcp__Claude_Browser__navigate: 'read', mcp__Claude_Browser__read_page: 'read',
   mcp__Claude_Browser__get_page_text: 'read', mcp__Claude_Browser__find: 'read',
@@ -281,6 +286,12 @@ function words(toks) {
   const w = toks.filter((t, i) => !isRedir(t) && !isRedir(toks[i - 1]));
   for (;;) {
     const h = w[0];
+    // `function f { ... }`: the keyword and the name go, and the body may never run.
+    if (h === 'function' && w.length > 2) {
+      w.reserved = true;
+      w.splice(0, 2);
+      continue;
+    }
     if (PREFIX.has(h) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(h ?? '')) {
       if (PREFIX.has(h) && h !== '{') w.reserved = true;
       w.shift();
@@ -374,6 +385,55 @@ function pushArgs(rest) {
   return { flags, pos };
 }
 
+// The scan, on a message file that write fills: any exit but 0 refuses, and so does a scan that outlasts ms.
+function scan(repo, write, what, ms, why = '') {
+  const tmp = mkdtempSync(join(tmpdir(), 'perturb-msg-'));
+  let r;
+  try {
+    write(join(tmp, 'message'));
+    r = spawnSync('bash', [join(HERE, 'commit-scan.sh'), repo, join(tmp, 'message')], { encoding: 'utf8', timeout: ms });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+  if (r.error?.code === 'ETIMEDOUT') refuse(what, `the scan did not finish in ${SCAN_TIMEOUT_MS / 1000} s`);
+  if (r.status !== 0) {
+    refuse(what, `commit-scan.sh exited ${r.status}${why}:\n${`${r.stdout ?? ''}${r.stderr ?? ''}`.trim()}\n`);
+  }
+}
+
+// What a push sends is scanned where it leaves, since the commit scan sees only a git commit the guard read: a
+// cherry-pick, git am, a merge or a script makes commits it never saw. The commits are those the sources reach
+// and the remote's branches, as last fetched, do not; a source git cannot resolve sends nothing (git refuses
+// the push itself). Scanned: each commit's message, author and committer, and its patch, so file names and
+// lines a later commit took out again count too. One time limit covers listing the commits and the scan.
+function checkOutgoing(flags, named, refspecs, repo) {
+  const began = Date.now();
+  const left = () => Math.max(1, SCAN_TIMEOUT_MS - (Date.now() - began));
+  const srcs = refspecs.length === 0 ? ['HEAD'] : refspecs.map((r) => (r.includes(':') ? r.slice(0, r.indexOf(':')) : r))
+    .map((s) => (s === '@' ? 'HEAD' : s));
+  const revs = srcs.filter((s) => s && git(repo, 'rev-parse', '-q', '--verify', `${s}^{commit}`));
+  if (flags.includes('--tags')) revs.push('--tags');
+  if (revs.length === 0) return;
+  const remote = named ?? (git(repo, 'config', '--get', `branch.${currentBranch(repo)}.remote`) || 'origin');
+  const not = git(repo, 'remote').split('\n').includes(remote) ? ['--not', `--remotes=${remote}`] : [];
+  const list = spawnSync('git', ['-C', repo, 'rev-list', '--max-count=1', ...revs, ...not], { encoding: 'utf8', timeout: left() });
+  if (list.error?.code === 'ETIMEDOUT') refuse('git push', `the scan did not finish in ${SCAN_TIMEOUT_MS / 1000} s`);
+  if (list.status !== 0) refuse('git push', `git could not list the commits it would send (${(list.stderr ?? '').trim()})`);
+  if (list.stdout.trim() === '') return;
+  scan(repo, (file) => {
+    const fd = openSync(file, 'w');
+    let log;
+    try {
+      log = spawnSync('git', ['-C', repo, '-c', 'core.quotePath=false', 'log', '--format=fuller', '--cc', '-U0', '--no-color',
+        '--no-ext-diff', '--no-textconv', ...revs, ...not], { stdio: ['ignore', fd, 'pipe'], encoding: 'utf8', timeout: left() });
+    } finally {
+      closeSync(fd);
+    }
+    if (log.error?.code === 'ETIMEDOUT') refuse('git push', `the scan did not finish in ${SCAN_TIMEOUT_MS / 1000} s`);
+    if (log.status !== 0) refuse('git push', `git could not print the commits it would send (${(log.stderr ?? '').trim()})`);
+  }, 'git push', left(), ' on the commits it would send (their messages, identities, file names and changes)');
+}
+
 function checkPush(rest, repo) {
   const { flags, pos } = pushArgs(rest);
   if (flags.some((f) => f === '-f' || f === '--force' || f.startsWith('--force-with-lease'))) {
@@ -383,9 +443,8 @@ function checkPush(rest, repo) {
   const del = flags.includes('-d') || flags.includes('--delete');
   const def = defaultBranch(repo);
   const refspecs = pos.slice(1);
-  if (refspecs.length === 0) {
-    if (!del && currentBranch(repo) === def) refuse(`git push on ${def}`, 'pushes to the default branch are off under /perturb');
-    return;
+  if (refspecs.length === 0 && !del && currentBranch(repo) === def) {
+    refuse(`git push on ${def}`, 'pushes to the default branch are off under /perturb');
   }
   for (const r of refspecs) {
     if (r.startsWith('+')) refuse('a force push', `the + refspec ${r} forces it`);
@@ -400,6 +459,9 @@ function checkPush(rest, repo) {
     const target = dst === 'HEAD' || dst === '@' ? currentBranch(repo) : dst;
     if (target === def) refuse(`git push to ${def}`, 'pushes to the default branch are off under /perturb');
   }
+  // A refspec with nothing before its colon deletes, and sends no commit.
+  const sends = refspecs.filter((r) => !r.startsWith(':'));
+  if (!del && (refspecs.length === 0 || sends.length)) checkOutgoing(flags, pos[0], sends, repo);
 }
 
 // The home folder in each spelling a command may use, so the raw command can be scanned without every path in it
@@ -435,19 +497,9 @@ function checkCommit(rest, repo, command) {
   // The raw command too: a message the parse does not read, such as one after git's abbreviation --mess, is still
   // scanned.
   msgs.push(command.replace(homeRe, '~'));
-  const tmp = mkdtempSync(join(tmpdir(), 'perturb-msg-'));
-  let r;
-  try {
-    writeFileSync(join(tmp, 'message'), msgs.join('\n\n'));
-    r = spawnSync('bash', [join(HERE, 'commit-scan.sh'), repo, join(tmp, 'message')],
-      { encoding: 'utf8', timeout: SCAN_TIMEOUT_MS });
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
-  }
-  if (r.error?.code === 'ETIMEDOUT') refuse('git commit', `the scan did not finish in ${SCAN_TIMEOUT_MS / 1000} s`);
-  if (r.status !== 0) {
-    refuse('git commit', `commit-scan.sh exited ${r.status}:\n${`${r.stdout ?? ''}${r.stderr ?? ''}`.trim()}\n`);
-  }
+  // The author and committer git would write, from its config and the environment: no message names them.
+  for (const who of ['GIT_AUTHOR_IDENT', 'GIT_COMMITTER_IDENT']) msgs.push(git(repo, 'var', who).replace(/ \d+ [-+]\d{4}$/, ''));
+  scan(repo, (file) => writeFileSync(file, msgs.join('\n\n')), 'git commit', SCAN_TIMEOUT_MS);
 }
 
 // A cd bash keeps for the commands after it: top level (in no substitution and no parentheses) and ended by &&, ;,
@@ -465,6 +517,8 @@ function cdTarget(rest) {
   else if (/^-./.test(rest[i] ?? '')) return '';
   return rest.length - i === 1 ? rest[i] : '';
 }
+// A cd with no operand, which bash takes to $HOME.
+const bareCd = (rest) => rest.every((a) => /^-[LPe]+$/.test(a) || a === '--');
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
 // Writes and removals are checked in every folder seen: the starting folder and each folder a cd names, resolved from
@@ -494,17 +548,21 @@ function bash(command, start) {
     }
     const w = words(toks);
     const [cmd, ...rest] = w;
-    if (cmd === 'cd' && !w.wrapped && toks.sep !== '|' && toks.sep !== '&') {
-      const d = cdTarget(rest);
+    // pushd moves like cd, and is a command like any other to a push or commit.
+    const pushd = cmd === 'pushd';
+    if ((cmd === 'cd' || pushd) && !w.wrapped && toks.sep !== '|' && toks.sep !== '&') {
+      // A bare cd goes to $HOME, read here as the guard's own home folder: a guess, so it adds and never places.
+      const home = !pushd && bareCd(rest);
+      const d = home ? HOME : cdTarget(rest);
       const moved = cwds.map((c) => (d && isDir(toPath(d, c)) ? toPath(d, c) : c));
       // Placing matters only to a push or commit, which any command but a kept cd refuses (other), so a cd that is
       // not kept needs no test here. A cd behind a reserved word adds and stops placing (after `! cd x &&` bash
       // skips the next cd); so does one that names no folder.
-      const placed = placing && !w.reserved;
+      const placed = placing && !w.reserved && !home && !pushd;
       if (!placed || !(d && isDir(toPath(d, cwds[0])))) placing = false;
       cwds = [...new Set(placed ? moved : [...cwds, ...moved])];
       for (const c of [...seen]) if (d && isDir(toPath(d, c))) seen.add(toPath(d, c));
-      if (keepsCd(toks)) continue;
+      if (keepsCd(toks) && !pushd) continue;
     }
     // Any other command makes a later push or commit refuse (other), so placing need not change here.
     const [cwd] = cwds;

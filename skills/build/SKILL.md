@@ -238,6 +238,15 @@ preflight so that it is the owner's choice and never the controller's.
   exhaustive run found the false sentence, twice). A change to a generator
   is measured for what it stops drawing as well as for what it starts
   drawing.
+- Code that predicts what another program will do (a shell, git, a parser
+  of someone else's format) is checked against that program, not against
+  a reader's model of it. The check is a generator of inputs, each run
+  through the real program in a throwaway folder and through the code,
+  with one invariant stated one way (for a guard: what the program was
+  harmed by, the code refused). It is a test file in the repository from
+  the task that first needs it, never a script in an agent's scratch
+  folder: a probe that is thrown away is paid for again by the next
+  review, and the review after that (clearing-review example C6).
 - A question to the owner that offers "list it" for an error that escapes
   states the smallest input measured to trigger it, not the input the
   asker has in mind (one such question was asked with 2**32 in mind, and
@@ -324,7 +333,14 @@ it voids it.
      syntactic shape (a list spread into a call's arguments), the fix brief
      asks first for a parser scan of the whole source for that shape, and
      the fix is sized from the scan (found one place at a time, one such
-     fault took three rounds and three commits). At most three rounds, then
+     fault took three rounds and three commits). When a round's blocker or
+     major is of a class an earlier round's was (one sentence describes
+     both, as in "the code believed the shell had moved when it had not"),
+     the series is not converging and the next fix is not another
+     instance: the fix round first builds the generator for the class (the
+     oracle rule in step 3), lands it as a test, and sizes the fix from
+     what it finds; attended, it tells the owner so before the fix, since
+     the class is then a question about the design. At most three rounds, then
      stop, report, and still do
      steps 5 to 7 with the PR marked uncleared. That round's minor findings
      and nits are listed for the owner too (next bullet); the fix pass

@@ -37,6 +37,7 @@ Changing facts live here so the charter stays short.
 - `/reflect`: mid-session capture into the repo's CLAUDE.md and living plan.
 - `/build`: execute an approved plan as a task graph, ending at a draft PR;
   `/build overnight` runs it unattended when enabled above.
+- `/perturb`: wide latitude toward a showcase branch to mine, behind a hook.
 
 <!-- Drop the section if no focus threads were named. -->
 ## Focus threads (at most 3)

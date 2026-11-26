@@ -1,8 +1,9 @@
 # The Symplecticator
 
 [![test](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml)
-(the scripts' six test suites on Ubuntu and macOS, and the guard suite
-also on Windows; the skills themselves are prose and have no tests)
+(the scripts' seven test suites on Ubuntu and macOS, and the two guard
+suites also on Windows; the skills themselves are prose: an audit checks
+what they name against the files, and nothing tests what they ask for)
 
 A Claude Code configuration for anyone who writes code with Claude: the
 Symplecticator pipeline (below), plus the skills, commands and setup
