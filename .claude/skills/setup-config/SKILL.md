@@ -497,6 +497,18 @@ is the pass, so say so to the adopter.
   trusted on this machine. If Node is installed, also run
   `node --test ~/.claude/scripts/ledger.test.mjs`; every test must pass.
   Without Node the ledger script is unavailable; say so.
+- **`/perturb`'s guard works on this machine:** the guard reads paths the
+  way this machine's shell and disk spell them, so it is checked here too.
+  `bash ~/.claude/scripts/commit-scan.test.sh` and
+  `bash ~/.claude/scripts/perturb-hook.test.sh` must exit 0 and end "all
+  passed"; with Node, `node --test ~/.claude/scripts/perturb-guard.test.mjs`
+  and `node --test ~/.claude/scripts/guard-oracle.test.mjs` must pass
+  every test. The last one runs generated commands in this machine's own
+  bash, inside a throwaway folder, and compares what bash did with what
+  the guard said; it takes a few minutes, so run these in the background
+  as well. Report any failure as it is: until it is fixed, `/perturb` is
+  not to be used on this machine. Without Node, `/perturb` refuses every
+  tool call; say so.
 
 A running session does not reload skills. Ask the adopter to open a new
 session and check that the skills appear.
