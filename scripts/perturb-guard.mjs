@@ -454,16 +454,17 @@ function checkCommit(rest, repo, command) {
 // a newline or the end of the command. Any other cd is an ordinary command, so a commit or push after it is refused.
 const KEEPS = new Set(['&&', ';', '\n', 'end']);
 const keepsCd = (toks) => !toks.sub && !toks.paren && KEEPS.has(toks.sep);
-// The folder a cd names: its options (-L, -P, -e and clusters of them) and a -- skipped. Any other word of two or
-// more characters starting with - is an invalid option, and two operands are too many; after either bash moves
-// nowhere, so the folder stays. A bare cd (home) is not followed; a lone - (bash's previous folder) is read as a
-// folder named -, so it moves the folder only where one exists.
+// The folder a cd names, and whether bash may stay instead: its options (-L, -P, -e and clusters of them) and a --
+// skipped. Any other word of two or more characters starting with - is an invalid option; after it bash moves
+// nowhere, so the folder stays. With two or more operands bash 5 refuses and stays, but bash 3.2 (macOS's stock bash)
+// moves to the first, so the first is named and marked unsure. A bare cd (home) is not followed; a lone - (bash's
+// previous folder) is read as a folder named -, so it moves the folder only where one exists.
 function cdTarget(rest) {
   let i = 0;
   while (/^-[LPe]+$/.test(rest[i] ?? '')) i++;
   if (rest[i] === '--') i++;
-  else if (/^-./.test(rest[i] ?? '')) return '';
-  return rest.length - i === 1 ? rest[i] : '';
+  else if (/^-./.test(rest[i] ?? '')) return { d: '', unsure: false };
+  return { d: rest[i] ?? '', unsure: rest.length - i > 1 };
 }
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
@@ -495,12 +496,12 @@ function bash(command, start) {
     const w = words(toks);
     const [cmd, ...rest] = w;
     if (cmd === 'cd' && !w.wrapped && toks.sep !== '|' && toks.sep !== '&') {
-      const d = cdTarget(rest);
+      const { d, unsure } = cdTarget(rest);
       const moved = cwds.map((c) => (d && isDir(toPath(d, c)) ? toPath(d, c) : c));
       // Placing matters only to a push or commit, which any command but a kept cd refuses (other), so a cd that is
       // not kept needs no test here. A cd behind a reserved word adds and stops placing (after `! cd x &&` bash
-      // skips the next cd); so does one that names no folder.
-      const placed = placing && !w.reserved;
+      // skips the next cd); so does one that names no folder, and one bash may not run (unsure).
+      const placed = placing && !w.reserved && !unsure;
       if (!placed || !(d && isDir(toPath(d, cwds[0])))) placing = false;
       cwds = [...new Set(placed ? moved : [...cwds, ...moved])];
       for (const c of [...seen]) if (d && isDir(toPath(d, c))) seen.add(toPath(d, c));
