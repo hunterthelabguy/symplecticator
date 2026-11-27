@@ -49,7 +49,7 @@ const voided = (extra) => ({ kind: 'void', id: '2030-01-01-0f0f', date: '2030-01
 const write = (dir, records) => fs.writeFileSync(at(dir), records.map((r) => `${typeof r === 'string' ? r : JSON.stringify(r)}\n`).join(''));
 const ADD = ['add', '--repo', 'demo', '--step', 'implement', '--model', 'opus-5.5', '--tokens', '5', '--file'];
 
-// ==== T1: records and add
+// ==== records and add
 
 test('4.1, 4.2: a run and an escape are appended as one line each that parses back; kind defaults to run, date to today', (t) => {
   const dir = folder(t);
@@ -479,7 +479,7 @@ test('3: the default log is COSTS.jsonl in the parent of the script folder, and 
   assert.equal(lines(dir).length, 1);
 });
 
-// ==== T2: check, similar, table
+// ==== check, similar, table
 
 test('6.2: check passes a clean log, counts its records and lists grades and step-notes', (t) => {
   const dir = folder(t);
