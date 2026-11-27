@@ -733,3 +733,13 @@ test('4.3: a void or a run naming a later line drops nothing; similar and table 
   assert.match(C.similar(at(dir), 'implement').out, /^implement: 3 fresh runs, /);
   assert.match(C.table(at(dir)).out, /total: 3 runs, /);
 });
+
+test('4.3: a superseder whose only problem is its run link still drops its target', (t) => {
+  const dir = folder(t);
+  write(dir, [record(), escape({ run: '2030-01-01-0a0a' }), escape({ id: '2030-01-01-0e1e', run: '2030-01-01-ffff', supersedes: '2030-01-01-0e0e' })]);
+  assert.deepEqual(C.check(at(dir)).problems, ['line 3: run: no earlier run record 2030-01-01-ffff']);
+  assert.match(C.table(at(dir)).out, /, 1 escape\nescapes with no linked run: 1$/);
+  fs.appendFileSync(at(dir), `${JSON.stringify(escape({ id: '2030-01-01-0e2e', run: '2030-01-01-0a0a', supersedes: '2030-01-01-0e1e' }))}\n`);
+  assert.deepEqual(C.check(at(dir)).problems, []);
+  assert.match(C.table(at(dir)).out, /, 1 escape\nescapes with no linked run: 0$/);
+});
