@@ -46,6 +46,11 @@ jobs:
       # The guard against the bash it models: generated commands, run in a throwaway home.
       - if: ${{ !cancelled() }}
         run: node --test scripts/guard-oracle.test.mjs
+      # What the prose says about this repository against its files.
+      - if: ${{ !cancelled() }}
+        run: node --test audit/self-audit.test.mjs
+      - if: ${{ !cancelled() }}
+        run: node audit/self-audit.mjs
 
   guard-windows:
     # The two guard suites alone on Windows, where the guard's drive-letter, /c/, mount and case-folding paths
