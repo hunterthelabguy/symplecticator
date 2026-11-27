@@ -46,7 +46,7 @@ test('suites: one left out of the workflow, the setup check or the verify line; 
   expects(check, swap(SETUP, 'bash ~/.claude/scripts/commit-scan.test.sh', 'the scan suite'), 'step 10 does not name scripts/commit-scan.test.sh');
   expects(check, swap('CLAUDE.md', '`node --test audit/self-audit.test.mjs`', 'the audit suite'), 'the Verify bullet does not name audit/self-audit.test.mjs');
   expects(check, add('scripts/new.test.sh', 'true\n'), 'the Verify bullet does not name scripts/new.test.sh',
-    'the suites job does not name scripts/new.test.sh', 'step 10 does not name scripts/new.test.sh', 'README.md says seven suites; there are 8', 'CLAUDE.md says eight suites; there are 9');
+    'the suites job does not name scripts/new.test.sh', 'step 10 does not name scripts/new.test.sh', 'README.md says eight suites; there are 9', 'CLAUDE.md says nine suites; there are 10');
   // A suite of the repository's own is not asked of setup, which runs on the adopter's machine.
   const own = problems(check, add('audit/new.test.mjs', ''));
   assert.ok(own.some((p) => p.includes('the suites job does not name audit/new.test.mjs')));
@@ -120,7 +120,7 @@ test("guard tools: a tool the skill's text names and the guard lacks, and the re
 });
 
 test('move together: a command that runs a script and is not on the update rule', () => {
-  expects('files that run scripts move with scripts/', add('commands/reflect.md', '\nRun `bash ~/.claude/scripts/ground-truth.sh`.\n'), 'does not name commands/reflect.md');
+  expects('files that run scripts move with scripts/', add('commands/new.md', '\nRun `bash ~/.claude/scripts/ground-truth.sh`.\n'), 'does not name commands/new.md');
 });
 
 test('a check that cannot run fails, and the plan files still in docs/ are a note, not a failure', () => {

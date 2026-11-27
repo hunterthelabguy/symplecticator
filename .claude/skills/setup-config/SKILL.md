@@ -96,10 +96,11 @@ Skip the reading and the interview.
    `*-examples.md` files never enter replace or remove: the adopter's
    `/reflect` curates them, so report upstream changes only (a new one is an
    add). Paths under "Kept local" are skipped. `skills/build`,
-   `skills/perturb`, `commands/handoff.md` and `scripts/` move together:
-   `/build`'s Stop hook, `/perturb`'s guard and `/handoff` run those
-   scripts, so never install any of them at a version whose scripts are
-   missing or kept at an older version. Changes in `templates/` are
+   `skills/perturb`, `commands/handoff.md`, `commands/reflect.md` and
+   `scripts/` move together: `/build`'s Stop hook, `/perturb`'s guard,
+   `/handoff` and `/reflect` run those scripts, so never install any of
+   them at a version whose scripts are missing or kept at an older
+   version. Changes in `templates/` are
    reported, never applied: the charter and addendum belong to the adopter
    now. Three exceptions are offered, each with a yes: a new settings hook,
    merged as in step 8.5; an empty `~/.claude/COSTS.jsonl` where the cost
