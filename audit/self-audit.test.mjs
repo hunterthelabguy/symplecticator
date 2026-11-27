@@ -139,6 +139,11 @@ test('records: a note only, never a check, and only while CLAUDE.md says the rep
   assert.ok(audit(tree).notes.some((n) => n.includes('holds no plan')));
   swap('CLAUDE.md', 'none in this repository', 'kept in docs/')(tree);
   assert.ok(!audit(tree).notes.some((n) => n.includes('holds no plan')));
+  // A note that cannot run is a failure, never silence. The tree throws only when the records function reads it.
+  class NoRecords extends Map { keys() { if (/\bat records \(/.test(new Error().stack)) throw new Error('unreadable'); return super.keys(); } }
+  const { results, failed } = audit(new NoRecords(REAL));
+  assert.ok(failed);
+  assert.deepEqual(results.filter((r) => r.problems.length).map((r) => [r.name, r.problems]), [['records the repository says it does not hold', ['the note could not run: unreadable']]]);
 });
 
 test('suites: the Linux and macOS job must run them, not only some other job', () => {
@@ -157,23 +162,31 @@ test('links: a folder is a target; a titled link and a reference-style link are 
   assert.deepEqual(problems(check, add('README.md', '\nSee [the skills](skills/) and [build](skills/build).\n')), []);
   expects(check, add('README.md', '\nSee [nothing](skills/no-such-skill/).\n'), 'links to skills/no-such-skill/');
   expects(check, add('README.md', '\nSee [titled](no-such-titled.md "a title").\n'), 'links to no-such-titled.md');
+  expects(check, add('README.md', "\nSee [single](no-such-single.md 'a title').\n"), 'links to no-such-single.md');
+  expects(check, add('README.md', '\nSee [paren](no-such-paren.md (a title)).\n'), 'links to no-such-paren.md');
   expects(check, add('README.md', '\n[ref]: no-such-ref.md\n'), 'links to no-such-ref.md');
-  assert.deepEqual(problems(check, add('README.md', '\n[site]: https://example.com/x\n[titled](PRIMER.md "the primer")\n')), []);
+  expects(check, add('README.md', '\n   [indented]: no-such-indented.md\n'), 'links to no-such-indented.md');
+  expects(check, add('README.md', '\n[angle]: <no-such-angle.md>\n'), 'links to no-such-angle.md,');
+  // A footnote definition is no link, and an angle-bracketed target is the file inside the brackets.
+  assert.deepEqual(problems(check, add('README.md', "\n[site]: https://example.com/x\n[titled](PRIMER.md \"the primer\") [single](PRIMER.md 'the primer')\n[^1]: Seen in a past build.\n[p]: <PRIMER.md>\n")), []);
 });
 
 test('scripts: names in the workflow, and installed spellings through $HOME or .claude/', () => {
   const check = 'named scripts exist';
   expects(check, add('.github/workflows/test.yml', '\n      - run: bash scripts/no-such-step.test.sh\n'), 'test.yml names scripts/no-such-step.test.sh');
   expects(check, add('skills/tdd/SKILL.md', '\nRun `bash "$HOME/.claude/scripts/no-such-home.sh"`.\n'), 'names scripts/no-such-home.sh');
+  expects(check, add('skills/tdd/SKILL.md', '\nRun `bash "${HOME}/.claude/scripts/no-such-brace.sh"`.\n'), 'names scripts/no-such-brace.sh');
   expects(check, add('skills/tdd/SKILL.md', '\nRun `bash .claude/scripts/no-such-dot.sh`.\n'), 'names scripts/no-such-dot.sh');
   assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\nRun `bash "$HOME/.claude/scripts/ground-truth.sh"`.\n')), []);
 });
 
 test('user-only: a quoted true counts as user-only', () => {
-  expects('user-only skills are listed in the addendum', (tree) => {
-    swap('skills/perturb/SKILL.md', 'disable-model-invocation: true', 'disable-model-invocation: "true"')(tree);
-    swap('templates/addendum.template.md', '- `/perturb`:', '- perturb:')(tree);
-  }, 'does not name /perturb');
+  for (const quoted of ['"true"', "'true'"]) {
+    expects('user-only skills are listed in the addendum', (tree) => {
+      swap('skills/perturb/SKILL.md', 'disable-model-invocation: true', `disable-model-invocation: ${quoted}`)(tree);
+      swap('templates/addendum.template.md', '- `/perturb`:', '- perturb:')(tree);
+    }, 'does not name /perturb');
+  }
 });
 
 test('floor: every spelling of a citation, and a list of items', () => {
@@ -181,7 +194,15 @@ test('floor: every spelling of a citation, and a list of items', () => {
   expects(check, add('skills/tdd/SKILL.md', '\nSee floor 0.\n'), 'cites floor item 0');
   expects(check, add('skills/tdd/SKILL.md', '\nSee floor-item 0.\n'), 'cites floor item 0');
   expects(check, add('skills/tdd/SKILL.md', '\nSee floor items 3 and 12.\n'), 'cites floor item 12');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee floor items 3, 12 and 5.\n'), 'cites floor item 12');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee floor items 3 or 12.\n'), 'cites floor item 12');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee floor items 3, 5, and 12.\n'), 'cites floor item 12');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee the charter floor\nitem 0.\n'), 'cites floor item 0');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee floor items\n3 and 12.\n'), 'cites floor item 12');
   assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\nSee floor items 3, 5 and 9.\n')), []);
+  // Only "floor items" takes a list: a count after one cited item is no citation, nor is a list item after a
+  // line that ends in "floor".
+  assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\nMutants (floor 9, 20 of 20 killed).\nThe practice floor\n12. A list item.\n')), []);
   // A tenth item, in the charter and in setup's list alike, is a floor item like the others.
   assert.deepEqual(problems(check, (tree) => {
     swap('templates/charter.template.md', '\n9. Tests exactly as thick', '\n10. A tenth item.\n9. Tests exactly as thick')(tree);

@@ -87,13 +87,15 @@ function links(t) {
   const has = (p) => t.has(p) || [...t.keys()].some((k) => k.startsWith(`${p}/`));
   for (const p of prose(t)) {
     const text = t.get(p);
-    // Inline links, a title after the target or not, and reference-style definitions.
-    for (const m of [...text.matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g), ...text.matchAll(/^ {0,3}\[[^\]]+\]:\s*(\S+)/gm)]) {
-      const target = m[1].replace(/#.*$/, '');
+    // Inline links, with a title in double quotes, single quotes or parentheses or none, and reference-style
+    // definitions, the target in angle brackets or not; a footnote definition ("[^1]: text") is no link.
+    for (const m of [...text.matchAll(/\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g), ...text.matchAll(/^ {0,3}\[(?!\^)[^\]]+\]:\s*(?:<([^>]*)>|(\S+))/gm)]) {
+      const raw = m[1] ?? m[2];
+      const target = raw.replace(/#.*$/, '');
       if (target === '' || /^[a-z][a-z0-9+.-]*:/i.test(target)) continue;
       // A folder link may end in a slash; the folder is found by the files under it.
       const resolved = posix.normalize(posix.join(posix.dirname(p), target)).replace(/\/$/, '');
-      if (!has(resolved)) out.push(`${p} links to ${m[1]}, which does not exist`);
+      if (!has(resolved)) out.push(`${p} links to ${raw}, which does not exist`);
     }
   }
   return out;
@@ -178,9 +180,10 @@ function floor(t) {
   const charter = items(section(t.get(CHARTER) ?? '', /^## Practice floor/, /^## (?!Practice floor)/));
   if (charter.size === 0) return [`${CHARTER}: no numbered "Practice floor" section`];
   for (const p of prose(t)) {
-    // "floor 3", "floor item 3", "floor-item 3", and a list: "floor items 3, 5 and 9".
-    for (const m of t.get(p).matchAll(/\bfloor(?:[ -]items?)?[ -](\d+(?:(?:,? and |, | or )\d+)*)\b/gi)) {
-      for (const n of m[1].split(/\D+/)) if (!charter.has(n)) out.push(`${p} cites floor item ${n}; ${CHARTER} has none`);
+    // "floor 3", "floor item 3" or "floor-item 3" cite one item; only "floor items" takes a list: "floor items 3,
+    // 5 and 9". A line may break before or after "item" or "items", never between "floor" and a bare number.
+    for (const m of t.get(p).matchAll(/\bfloor(?:(?:[ -]|[ \t]*\n[ \t]*)item(?:[ -]|[ \t]*\n[ \t]*)|[ -])(\d+)\b|\bfloor(?:[ -]|[ \t]*\n[ \t]*)items(?:[ -]|[ \t]*\n[ \t]*)(\d+(?:(?:,? and |, | or )\d+)*)\b/gi)) {
+      for (const n of (m[1] ?? m[2]).split(/\D+/)) if (!charter.has(n)) out.push(`${p} cites floor item ${n}; ${CHARTER} has none`);
     }
   }
   const round = items(section(t.get(SETUP) ?? '', /^## 4\. Round 2/, /^## 5\./));
