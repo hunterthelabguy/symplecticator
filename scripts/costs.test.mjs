@@ -264,7 +264,8 @@ test('6.1: when git cannot say whether the log is in a repository, add refuses a
   fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'gone')}\n`);
   const broken = cli(...ADD, at(dir));
   assert.equal(broken.status, 2);
-  assert.match(broken.stderr, /^add: cannot tell whether .* is in a git repository: fatal: not a git repository: /);
+  // Git words this refusal two ways across versions; either is a repository git will not open.
+  assert.match(broken.stderr, /^add: cannot tell whether .* is in a git repository: fatal: (not a git repository|gitfile does not point to a valid repository): /);
   assert.equal(fs.existsSync(at(dir)), false);
 });
 
