@@ -41,7 +41,9 @@ Everything that could fail for lack of a human fails now, not at 1 a.m.
    and the agent count: one implementer and one reviewer per task, the
    floor-9 batch if it is taken (one of each), the simplify passes (up to
    three), and the final clearing review. Give what similar steps cost
-   before, from `~/.claude/COSTS.md`, or "not yet measured". Then ask the one question: **[overnight]** "Start overnight?
+   before, as `node ~/.claude/scripts/costs.mjs similar <step>` prints
+   it for each step, or "not yet measured". Then ask the one question:
+   **[overnight]** "Start overnight?
    Stay until you see 'You can leave now'." (this approves the night's
    budget); attended, the cost gate's run, lighter or skip, if the gate is
    on.
@@ -73,10 +75,20 @@ after. Its edits to the progress file go by a script file, never a one-line
 `node -e` or `sed` (one has mangled an escape). Nothing commits it after
 the clearing review that clears: that would void the review. If the file
 already exists, this is a resume: trust it, reconcile with git, and
-continue. If the cost gate is on, append each finished agent's token count
-to `~/.claude/COSTS.md` by a write that cannot truncate: an append, or a
-temp file renamed over it (a full disk has truncated that file to 0 bytes
-mid-run; restore it from git).
+continue. If the cost gate is on, record each finished agent's run with
+`node ~/.claude/scripts/costs.mjs add`, one record per run, once the
+harness has reported its final token count; `add --help` lists the keys,
+and the README's "Cost records" section shows worked examples. A resumed
+agent's record gives `--resumed`, the tokens this run added and the
+running `--total`. The script only ever appends, so a full disk cannot
+empty the log (one once truncated a hand-written log to 0 bytes mid-run).
+If `add` says "appended, not committed", or refuses because another
+session held its lock past the wait, do not run it again for that run:
+report its message (on an overnight run, in the progress file) and go on.
+With no Node on the machine, append the record as one line of JSON to
+`~/.claude/COSTS.jsonl` from bash or PowerShell 7 (Windows PowerShell
+5.1's `>>` writes UTF-16, which the script cannot read) and commit that
+file alone.
 
 ## 2. Run the frontier
 
@@ -353,10 +365,11 @@ it voids it.
      attended, at the cost gate as "lighter" or by asking for one;
      **[overnight]** every round reads the whole diff. The PR body then
      says, on a line of its own, that no single review read the whole head.
-   - **Record:** each clearing round's COSTS.md entry gives its round
-     number, the counts per grade and the leftovers listed; a defect later
-     traced to a finding left unfixed, or to code a delta review did not
-     read, is recorded there as an escape.
+   - **Record:** each clearing round's cost record gives `--round`,
+     `--verdict`, a `--finding` count per grade and, in its note, the
+     leftovers listed; a defect later traced to a finding left unfixed, or
+     to code a delta review did not read, is recorded as an escape
+     (`add --kind escape --run <that round's id>`).
 
    When it clears, put `Review: <reviewer> at <sha>` in the PR body
    (editing the PR body is not a commit), plus what it caught that the

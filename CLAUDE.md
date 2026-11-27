@@ -12,10 +12,11 @@ the rest: in setup, "the owner" means you, not the maintainer.
   `node --test scripts/ledger.test.mjs`,
   `bash scripts/commit-scan.test.sh`,
   `node --test scripts/perturb-guard.test.mjs`,
-  `bash scripts/perturb-hook.test.sh` and
+  `bash scripts/perturb-hook.test.sh`,
   `node --test scripts/guard-oracle.test.mjs` (the guard against real
-  bash), all green. CI runs all seven on Linux and macOS, and the two
-  guard suites (`node --test`) alone on Windows.
+  bash) and `node --test scripts/costs.test.mjs`, all green. CI runs all
+  eight on Linux and macOS, and the two guard suites and the costs suite
+  (`node --test`) alone on Windows.
   A check that cannot run here (the jq checks without `gh` signed in, the
   gh-missing case when `gh` cannot be hidden) counts as skipped, not
   passed.

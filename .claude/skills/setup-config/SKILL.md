@@ -102,12 +102,21 @@ Skip the reading and the interview.
    missing or kept at an older version. Changes in `templates/` are
    reported, never applied: the charter and addendum belong to the adopter
    now. Three exceptions are offered, each with a yes: a new settings hook,
-   merged as in step 8.5; an `## Escapes` section with its text from step
-   8.4, appended to an existing `COSTS.md` that lacks one (`/reflect` logs
-   escapes there); and, when `~/.claude/scan-patterns.local` is absent, the
-   scan list: ask Round 1 item 6's separate question, and on a yes ask for
-   the values themselves (`update` skips the interview, so it has none in
-   hand), then draft the list as in step 8.6 and show it before writing.
+   merged as in step 8.5; an empty `~/.claude/COSTS.jsonl` where the cost
+   gate is on and none exists (the costs script records runs and escapes
+   there; an existing `COSTS.md` is left as it is, as the archive), with,
+   if `~/.claude` is a git repository whose `.gitignore` is a whitelist,
+   the line `!/COSTS.jsonl` added to it, since otherwise every record ends
+   "appended, not committed"; and, when `~/.claude/scan-patterns.local` is
+   absent, the scan list: ask Round 1 item 6's separate question, and on a
+   yes ask for the values themselves (`update` skips the interview, so it
+   has none in hand), then draft the list as in step 8.6 and show it before
+   writing. Tell an adopter whose charter predates the costs script to
+   change three places by hand, as the templates now word them: the
+   charter's cost gate bullet (where similar costs come from, and recording
+   each agent with `add`), the charter's review cadence line (the figures
+   come from `table`), and the addendum's config repo line (`COSTS.jsonl`
+   in place of `COSTS.md`).
 4. Show the groups, ask for a yes per group, back up, write, and update
    `setup-source.md`. With git, record the new commit. Without git, refresh
    the baseline: move `setup-backups/baseline/` into this run's backup
@@ -257,7 +266,7 @@ each first. Any combination is valid.
   executing critique, a clearing review, `/build`, a repeated pass), Claude
   says how many agents and what similar steps cost before, and asks: run,
   lighter, or skip. Agent steps cost far more than ordinary turns, because
-  each agent starts cold. Costs are logged in `~/.claude/COSTS.md`. A skip
+  each agent starts cold. Costs are logged in `~/.claude/COSTS.jsonl`. A skip
   needs your acknowledgement, recorded where the check would have been (a
   skipped clearing review leaves the pull request marked uncleared), and a
   repeated skip draws a coaching note.
@@ -322,7 +331,7 @@ Explain each, then ask:
   yet set up is "no". If wanted, say what that separate task starts with: a
   whitelist `.gitignore` that ignores everything (`/*`) and un-ignores only
   the hand-written files (`CLAUDE.md`, `PERSONAL-ADDENDUM.md`, `LEDGER.md`,
-  `COSTS.md`, `settings.json`, `skills/`, `commands/`, `scripts/`). Why:
+  `COSTS.jsonl`, `settings.json`, `skills/`, `commands/`, `scripts/`). Why:
   `~/.claude` also holds transcripts (`projects/`), session state and
   possibly credentials, and a whitelist is what keeps them out of history
   for good.
@@ -400,17 +409,14 @@ Build everything in the scratch location first (see the rules):
    Claude-drafted, or "free answer">`. Leave one blank line between entries. Facts are not rulings and are never
    quoted: Round 1 answers, the identity, the number of accounts, the plan
    type, and any private value.
-4. **Costs log**, only if the cost gate is on: `~/.claude/COSTS.md` with the
-   header "# Agent costs", then "One line per agent run: date, step, model,
-   tokens. The cost gate reads this file; the term review sets it beside the
-   findings each step caught and the escapes below. Each critique, simplify
-   and review entry names the commit it read; an executing-critique entry
-   also logs tasks executed out of total. New agent lines go above the
-   Escapes section.", then a section "## Escapes" with "A defect found after
-   a step passed work whose contract covered it, present at the commit that
-   step read. One line each: date found; the defect; who or what found it;
-   the step, by its log date above; a miss (in contract) or a contract gap
-   (fix the skill, add a worked example). The skill text decides."
+4. **Costs log**, only if the cost gate is on: an empty file
+   `~/.claude/COSTS.jsonl`. `scripts/costs.mjs`, copied with the other
+   scripts, writes one record per agent run and per escape there and
+   prints the figures the cost gate and the term review quote; it needs
+   Node 18.13 or later. The README's "Cost records" section shows the
+   record format. Never create or append to a `COSTS.md`: if one exists
+   from an earlier setup, leave it as it is and tell the adopter it is
+   now the archive, which the script does not read.
 5. **Settings** from `templates/settings.template.json`, merged into any
    existing `~/.claude/settings.json` per step 7. Write `cleanupPeriodDays` as
    a number; `promptCacheTtl` only if they chose one; `attribution` with
@@ -438,8 +444,8 @@ Build everything in the scratch location first (see the rules):
 
 ## 9. Show, then write
 
-Show the charter and addendum in full, the ledger section, the costs log
-header, the settings change as a diff, the copy list, the scan list (if
+Show the charter and addendum in full, the ledger section, the costs log's
+path, the settings change as a diff, the copy list, the scan list (if
 they said keep; its values are the adopter's own and appear only in this
 session), `setup-source.md`, and (without git) the baseline copy. Ask for
 one final yes, then write, and delete the drafts.
@@ -459,7 +465,7 @@ is the pass, so say so to the adopter.
   `python -c "import json,os; json.load(open(os.path.expanduser('~/.claude/settings.json'), encoding='utf-8'))"`,
   or `Get-Content "$env:USERPROFILE\.claude\settings.json" -Raw | ConvertFrom-Json | Out-Null`.
 - **No template residue** in the written files (`CLAUDE.md`,
-  `PERSONAL-ADDENDUM.md`, and `LEDGER.md`, `COSTS.md` if created, and
+  `PERSONAL-ADDENDUM.md`, and `LEDGER.md` if created, and
   `settings.json`): `grep -n -e "FILL IN" -e "<!--" <files>`, or
   `Select-String -Path <files> -Pattern 'FILL IN','<!--'`; nothing found.
 - **No em dashes** in the written files: `grep -n $'\xe2\x80\x94' <files>`, or
@@ -497,6 +503,10 @@ is the pass, so say so to the adopter.
   trusted on this machine. If Node is installed, also run
   `node --test ~/.claude/scripts/ledger.test.mjs`; every test must pass.
   Without Node the ledger script is unavailable; say so.
+- **The costs script works on this machine**, if the cost gate is on:
+  `node --test ~/.claude/scripts/costs.test.mjs`; every test passes. With
+  no Node installed, say so: the cost gate then answers "not yet
+  measured", and each record is appended by hand as `/build` describes.
 
 A running session does not reload skills. Ask the adopter to open a new
 session and check that the skills appear.

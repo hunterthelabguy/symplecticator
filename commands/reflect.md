@@ -44,8 +44,9 @@ file, if any. If it does not, ask before routing state.
   loads whenever its skill runs, so an entry that misleads or no longer fits
   is retired too.
 - A defect found this session that an earlier step had passed (critique, simplify,
-  clearing review): one line under Escapes in `~/.claude/COSTS.md`, if that file
-  exists.
+  clearing review): one escape record, by
+  `node ~/.claude/scripts/costs.mjs add --kind escape` naming that step's run
+  (`add --help` lists the keys), if `~/.claude/COSTS.jsonl` exists.
 
 ## 3. Prune
 
