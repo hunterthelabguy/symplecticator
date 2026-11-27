@@ -335,6 +335,150 @@ COMMANDS.add = (argv) => {
   return 0;
 };
 
+// ==== T2: check, similar, table
+
+// Records no later record supersedes.
+function live(records) {
+  const dropped = new Set(records.filter((r) => Object.hasOwn(r, 'supersedes')).map((r) => r.supersedes));
+  return records.filter((r) => !dropped.has(r.id));
+}
+
+// The numbers of the lines a later valid record supersedes: check does not report them, and a reader does not
+// count one as skipped.
+function supersededLines(log) {
+  const last = new Map();
+  for (const l of log.lines) if (l.record && Object.hasOwn(l.record, 'supersedes')) last.set(l.record.supersedes, l.n);
+  return new Set(log.lines.filter((l) => (last.get(idOf(l)) ?? 0) > l.n).map((l) => l.n));
+}
+
+// Every problem in the log, each with its line number, and the counts a reader of the log wants beside them.
+export function check(file) {
+  const log = readLog(file);
+  const quiet = supersededLines(log);
+  const problems = [];
+  const earlier = [];
+  for (const l of log.lines) {
+    const mine = [...l.bad];
+    if (l.record) {
+      if (earlier.some((e) => idOf(e) === l.record.id)) mine.push(`id ${l.record.id} occurs twice`);
+      mine.push(...linkProblems(l.record, earlier));
+    }
+    // No record can supersede a line with no well-formed id, nor a void, so a problem on either is deleted by hand.
+    if (!l.record && !isId(idOf(l))) mine.push('no usable id, so no record can supersede this line: delete it by hand and commit the log');
+    else if (l.record?.kind === 'void' && mine.length) mine.push('a void record, so no record can supersede this line: delete it by hand and commit the log');
+    if (!quiet.has(l.n)) for (const b of mine) problems.push(`line ${l.n}: ${b}`);
+    earlier.push(l);
+  }
+  if (log.text !== '' && !log.text.endsWith('\n')) problems.push('the log does not end in a line end');
+  const count = (list) => {
+    const m = new Map();
+    for (const [k, n] of list) m.set(k, (m.get(k) ?? 0) + n);
+    return [...m].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
+  };
+  const runs = log.records.filter((r) => r.kind === 'run');
+  const kinds = (kind) => log.records.filter((r) => r.kind === kind).length;
+  const info = [
+    `records: ${runs.length} run, ${kinds('escape')} escape, ${kinds('void')} void`,
+    `grades in use: ${count(runs.flatMap((r) => Object.entries(r.findings ?? {})))}`,
+    `step-notes in use: ${count(runs.filter((r) => Object.hasOwn(r, 'step-note')).map((r) => [r['step-note'], 1]))}`,
+  ];
+  return { problems, info };
+}
+
+const num = (n) => n.toLocaleString('en-US');
+// min, median and max of a list of whole numbers; the median of an even count is the mean of the middle two.
+function spread(list) {
+  const s = [...list].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return { min: s[0], median: s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2), max: s[s.length - 1] };
+}
+const skippedOf = (log) => {
+  const quiet = supersededLines(log);
+  return log.lines.filter((l) => !l.record && !quiet.has(l.n)).length;
+};
+const liveRuns = (log) => live(log.records).filter((r) => r.kind === 'run');
+const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+// What similar steps cost before: the line a cost gate quotes, then the last five runs, the newest first.
+export function similar(file, step, { model, repo } = {}) {
+  if (!STEPS.includes(step)) throw new CostsError(`similar: give a step, one of ${STEPS.join(', ')}`);
+  const log = readLog(file);
+  const runs = liveRuns(log)
+    .filter((r) => r.step === step && r.resumed !== true && (model === undefined || r.model === model) && (repo === undefined || r.repo === repo))
+    .sort(byDate);
+  if (runs.length === 0) return { out: `${step}: not yet measured`, skipped: skippedOf(log) };
+  const s = spread(runs.map((r) => r.tokens));
+  const last = runs.slice(-5).reverse();
+  const out = [
+    `${step}: ${runs.length} fresh run${runs.length === 1 ? '' : 's'}, min ${num(s.min)}, median ${num(s.median)}, max ${num(s.max)} tokens (${runs[0].date} to ${runs[runs.length - 1].date})`,
+    `last ${last.length}:`,
+    ...last.map((r) => `  ${r.date}  ${num(r.tokens)}  ${r.model}  ${r.repo}`),
+  ].join('\n');
+  return { out, skipped: skippedOf(log) };
+}
+
+// The per-step table a periodic review reads: runs, the spread of fresh runs, tokens, findings, escapes. An escape
+// counts on the step of the run it names, whatever that run's date and whether or not it was superseded.
+export function table(file, { since, until } = {}) {
+  for (const [k, v] of [['since', since], ['until', until]]) if (v !== undefined && !isDate(v)) throw new CostsError(`table: --${k} takes an ISO date`);
+  const log = readLog(file);
+  const inRange = (r) => (since === undefined || r.date >= since) && (until === undefined || r.date <= until);
+  const runs = liveRuns(log).filter(inRange);
+  const escapes = live(log.records).filter((r) => r.kind === 'escape' && inRange(r));
+  const stepOf = new Map(log.records.filter((r) => r.kind === 'run').map((r) => [r.id, r.step]));
+  const rows = [];
+  for (const step of STEPS) {
+    const mine = runs.filter((r) => r.step === step);
+    const escaped = escapes.filter((e) => stepOf.get(e.run) === step).length;
+    if (mine.length === 0 && escaped === 0) continue;
+    const fresh = mine.filter((r) => r.resumed !== true);
+    const s = fresh.length ? spread(fresh.map((r) => r.tokens)) : null;
+    const tokens = mine.reduce((sum, r) => sum + r.tokens, 0);
+    const grades = new Map();
+    for (const r of mine) for (const [g, n] of Object.entries(r.findings ?? {})) grades.set(g, (grades.get(g) ?? 0) + n);
+    const findings = [...grades].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([g, n]) => (n === 0 ? `${g} 0` : `${g} ${num(n)} (${num(Math.round(tokens / n))} each)`)).join(', ') || '-';
+    rows.push(`| ${step} | ${mine.length} | ${fresh.length} | ${s ? num(s.min) : '-'} | ${s ? num(s.median) : '-'} | ${s ? num(s.max) : '-'} | ${num(tokens)} | ${findings} | ${escaped} |`);
+  }
+  const out = [
+    '| Step | Runs | Fresh | Min | Median | Max | Tokens | Findings | Escapes |',
+    '|---|---|---|---|---|---|---|---|---|',
+    ...rows,
+    '',
+    `total: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${num(runs.reduce((sum, r) => sum + r.tokens, 0))} tokens, ${escapes.length} escape${escapes.length === 1 ? '' : 's'}`,
+    `escapes with no linked run: ${escapes.filter((e) => !stepOf.has(e.run)).length}`,
+  ].join('\n');
+  return { out, skipped: skippedOf(log) };
+}
+
+// Print a reader's output; a log with lines that are not valid records says so on standard error.
+function show({ out, skipped }) {
+  console.log(out);
+  if (skipped) console.error(`costs: skipped ${skipped} line${skipped === 1 ? '' : 's'} that ${skipped === 1 ? 'is' : 'are'} not a valid record; run check`);
+  return 0;
+}
+
+COMMANDS.check = (argv) => {
+  const f = flags(argv);
+  for (const k of Object.keys(f)) if (k !== 'file') throw new CostsError(`check: unknown flag --${k}`);
+  const { problems, info } = check(f.file ?? DEFAULT_FILE);
+  for (const p of problems) console.log(p);
+  for (const i of info) console.log(i);
+  return problems.length ? 1 : 0;
+};
+
+COMMANDS.similar = ([step, ...argv]) => {
+  const f = flags(argv);
+  for (const k of Object.keys(f)) if (!['file', 'model', 'repo'].includes(k)) throw new CostsError(`similar: unknown flag --${k}`);
+  return show(similar(f.file ?? DEFAULT_FILE, step, { model: f.model, repo: f.repo }));
+};
+
+COMMANDS.table = (argv) => {
+  const f = flags(argv);
+  for (const k of Object.keys(f)) if (!['file', 'since', 'until'].includes(k)) throw new CostsError(`table: unknown flag --${k}`);
+  return show(table(f.file ?? DEFAULT_FILE, { since: f.since, until: f.until }));
+};
+
 // ==== run
 
 export function main([command, ...argv]) {
