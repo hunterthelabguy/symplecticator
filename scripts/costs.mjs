@@ -166,6 +166,11 @@ export function readLog(file) {
     try { json = JSON.parse(bare); bad = validate(json); } catch { bad = ['not JSON']; }
     lines.push({ n: i + 1, json, record: bad.length ? null : json, bad });
   });
+  const earlier = [];
+  for (const l of lines) {
+    if (l.record && Object.hasOwn(l.record, 'supersedes')) l.honoured = !linkProblems(l.record, earlier).some((b) => b.startsWith('supersedes:'));
+    earlier.push(l);
+  }
   return { text, lines, records: lines.filter((l) => l.record).map((l) => l.record) };
 }
 
@@ -173,7 +178,7 @@ export function readLog(file) {
 function standing(id, lines) {
   let end = null;
   for (let i = 0; i < lines.length; i++) {
-    const next = lines.find((l) => l.record && l.record.supersedes === id);
+    const next = lines.find((l) => l.honoured && l.record.supersedes === id);
     if (!next) break;
     end = next;
     id = next.record.id;
@@ -338,16 +343,16 @@ COMMANDS.add = (argv) => {
 // ==== check, similar, table
 
 // Records no later record supersedes.
-function live(records) {
-  const dropped = new Set(records.filter((r) => Object.hasOwn(r, 'supersedes')).map((r) => r.supersedes));
-  return records.filter((r) => !dropped.has(r.id));
+function live(log) {
+  const dropped = new Set(log.lines.filter((l) => l.honoured).map((l) => l.record.supersedes));
+  return log.records.filter((r) => !dropped.has(r.id));
 }
 
 // The numbers of the lines a later valid record supersedes: check does not report them, and a reader does not
 // count one as skipped.
 function supersededLines(log) {
   const last = new Map();
-  for (const l of log.lines) if (l.record && Object.hasOwn(l.record, 'supersedes')) last.set(l.record.supersedes, l.n);
+  for (const l of log.lines) if (l.honoured) last.set(l.record.supersedes, l.n);
   return new Set(log.lines.filter((l) => (last.get(idOf(l)) ?? 0) > l.n).map((l) => l.n));
 }
 
@@ -396,7 +401,7 @@ const skippedOf = (log) => {
   const quiet = supersededLines(log);
   return log.lines.filter((l) => !l.record && !quiet.has(l.n)).length;
 };
-const liveRuns = (log) => live(log.records).filter((r) => r.kind === 'run');
+const liveRuns = (log) => live(log).filter((r) => r.kind === 'run');
 const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
 
 // What similar steps cost before: the line a cost gate quotes, then the last five runs, the newest first.
@@ -424,7 +429,7 @@ export function table(file, { since, until } = {}) {
   const log = readLog(file);
   const inRange = (r) => (since === undefined || r.date >= since) && (until === undefined || r.date <= until);
   const runs = liveRuns(log).filter(inRange);
-  const escapes = live(log.records).filter((r) => r.kind === 'escape' && inRange(r));
+  const escapes = live(log).filter((r) => r.kind === 'escape' && inRange(r));
   const stepOf = new Map(log.records.filter((r) => r.kind === 'run').map((r) => [r.id, r.step]));
   const rows = [];
   for (const step of STEPS) {

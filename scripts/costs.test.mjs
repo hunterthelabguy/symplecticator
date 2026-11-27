@@ -698,3 +698,18 @@ test('4.4: a void drops its target and counts as nothing: no run, escape, row, t
     'escapes with no linked run: 0',
   ].join('\n'), skipped: 0 });
 });
+
+test('4.3: a supersedes that check reports drops nothing, and its target can still be corrected', (t) => {
+  const dir = folder(t);
+  const a = C.add(at(dir), RUN);
+  const e = C.add(at(dir), { ...ESCAPE, run: a });
+  fs.appendFileSync(at(dir), `${JSON.stringify(record({ id: '2030-01-02-beef', date: '2030-01-02', supersedes: e }))}\n`);
+  assert.deepEqual(C.check(at(dir)).problems, [`line 3: supersedes: ${e} is an escape record`]);
+  assert.match(C.table(at(dir)).out, /, 1 escape\n/);
+  // The rejected link supersedes nothing, so the escape it names can still be corrected.
+  const e2 = C.add(at(dir), { ...ESCAPE, run: a, note: 'corrected', supersedes: e });
+  C.add(at(dir), { ...RUN, supersedes: '2030-01-02-beef' });
+  assert.deepEqual(C.check(at(dir)).problems, []);
+  assert.match(C.table(at(dir)).out, /, 1 escape\n/);
+  assert.equal(C.readLog(at(dir)).records.filter((r) => r.kind === 'escape').at(-1).id, e2);
+});
