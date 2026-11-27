@@ -152,9 +152,10 @@ and patch, and the decisions made since; never resume the drafter or an
 earlier fold's agent, whose context grows with every round (four resumed
 folds of one plan once ran 585k, 754k, 818k and 888k tokens, and the
 plan's route came to more than three times the top of its estimate). Each
-pass's `COSTS.md` line (if the cost gate is on) logs tasks executed out of
-total and, from pass 2, the first task whose block changed since the last
-pass: the data a prefix-reuse scheme would need. Fixed point: if the pass
+pass's cost record (if the cost gate is on) gives `--tasks-done` and
+`--tasks-total` and, from pass 2, `--first-changed`, the first task whose
+block changed since the last pass: the data a prefix-reuse scheme would
+need (`add --help` lists every key). Fixed point: if the pass
 found anything, run it again on the revision with a fresh context
 (different model or effort); stop at the first
 clean pass; cap three. A plan is ready for `/build` only after a clean

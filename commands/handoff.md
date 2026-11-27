@@ -31,6 +31,16 @@ say "no verification exists for this repo" and do not imply otherwise. Before an
 push, confirm no secrets or third-party personal data are in the change; if unsure,
 stop and ask.
 
+If `~/.claude/COSTS.jsonl` exists, run `node ~/.claude/scripts/costs.mjs check`
+(on a machine with no Node, skip it and say so). A line it reports is not a
+reason to stop: put its failures in the handoff block. A wrong record, or a
+line of JSON that is not a valid record, is corrected by a new record that
+supersedes the one that stands (`add --supersedes <id>`). A record that
+should not exist (a duplicate, or a second superseder) is retracted with
+`add --kind void --supersedes <id> --note <why>`, never superseded. A line
+`check` says no record can supersede (one with no usable id, or a void it
+reports) is deleted by hand, in an editor, then the file is committed.
+
 ## 3. Land
 
 1. Branch if the landing rule requires it.
