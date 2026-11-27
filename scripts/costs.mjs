@@ -342,13 +342,13 @@ COMMANDS.add = (argv) => {
 
 // ==== check, similar, table
 
-// Records no later record supersedes.
+// Records no later honoured link supersedes (one check finds no supersedes problem with).
 function live(log) {
   const dropped = new Set(log.lines.filter((l) => l.honoured).map((l) => l.record.supersedes));
   return log.records.filter((r) => !dropped.has(r.id));
 }
 
-// The numbers of the lines a later valid record supersedes: check does not report them, and a reader does not
+// The numbers of the lines a later honoured link supersedes: check does not report them, and a reader does not
 // count one as skipped.
 function supersededLines(log) {
   const last = new Map();
