@@ -109,7 +109,7 @@ const REFUSED = [
   [{ ...RUN, effort: 'High' }, /effort: lower-case/], [{ ...RUN, round: 0 }, /round: a whole number, one or more/], [{ ...RUN, round: 1.5 }, /round: a whole/],
   [{ ...RUN, tools: 1.5 }, /tools: a whole number/], [{ ...RUN, tools: -1 }, /tools: a whole number/],
   [{ ...RUN, minutes: -1 }, /minutes: a number/], [{ ...RUN, minutes: '5' }, /minutes: a number/], [{ ...RUN, minutes: Infinity }, /minutes: a number/],
-  [{ ...RUN, plan: 'a\nb' }, /plan: one line/], [{ ...RUN, pr: '' }, /pr: one line/],
+  [{ ...RUN, plan: 'a\nb' }, /plan: one line/], [{ ...RUN, plan: 'a\rb' }, /plan: one line/], [{ ...RUN, pr: '' }, /pr: one line/],
   [{ ...RUN, verdict: 'passed' }, /verdict: one of/],
   [{ ...RUN, findings: { Major: 1 } }, /findings: a map/], [{ ...RUN, findings: { 'ma.jor': 1 } }, /findings: a map/],
   [{ ...RUN, findings: { major: -1 } }, /findings: a map/], [{ ...RUN, findings: { major: 1.5 } }, /findings: a map/], [{ ...RUN, findings: [1] }, /findings: a map/],
@@ -317,7 +317,12 @@ test('6.1: a held lock refuses after the wait and names its age; nothing is writ
   fs.mkdirSync(lock);
   const old = new Date(Date.now() - 90000);
   fs.utimesSync(lock, old, old);
-  refuses(() => C.add(at(dir), RUN, { waitMs: 100 }), /the lock .*costs-add\.lock is (89|90|91) s old/);
+  const t0 = Date.now();
+  let message = '';
+  refuses(() => C.add(at(dir), RUN, { waitMs: 100 }), { test: (m) => { message = m; return /the lock .*costs-add\.lock is \d+ s old/.test(m); } });
+  const age = Number(/is (\d+) s old/.exec(message)[1]);
+  const slack = Math.ceil((Date.now() - t0) / 1000);
+  assert.ok(age >= 89 && age <= 91 + slack, `the lock is ${age} s old after ${slack} s`);
   assert.equal(fs.existsSync(at(dir)), false);
   assert.equal(fs.existsSync(lock), true);
 });
@@ -343,7 +348,7 @@ test('6.1: add takes a lock released within the wait, and with no wait given ref
   assert.equal(lines(freed).length, 1);
   const [heldCode, heldMs] = await a.done;
   assert.equal(heldCode, 2);
-  assert.ok(heldMs >= 10000 && heldMs < 20000, `waited ${heldMs} ms`);
+  assert.ok(heldMs >= 10000 && heldMs < 15000, `waited ${heldMs} ms`);
   assert.equal(fs.existsSync(at(held)), false);
 });
 
@@ -510,6 +515,7 @@ test('6.2: check fails on each of its conditions, with the line number, and not 
     [[record({ id: '2030-01-02-0a0a' })], "line 1: id: its first ten characters are the record's date"],
     [[record(), '', record()], 'line 3: id 2030-01-01-0a0a occurs twice'],
     [[record(), escape({ id: '2030-01-01-0a0a' })], 'line 2: id 2030-01-01-0a0a occurs twice'],
+    [[record({ supersedes: '2030-01-01-0a0a' })], 'line 1: supersedes: no earlier record 2030-01-01-0a0a'],
     [[record({ supersedes: '2030-01-01-0b0b' }), record({ id: '2030-01-01-0b0b' })], 'line 1: supersedes: no earlier record 2030-01-01-0b0b'],
     [[escape(), record({ supersedes: '2030-01-01-0e0e' })], 'line 2: supersedes: 2030-01-01-0e0e is an escape record'],
     [[escape({ run: '2030-01-01-0a0a' }), record()], 'line 1: run: no earlier run record 2030-01-01-0a0a'],
