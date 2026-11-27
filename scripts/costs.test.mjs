@@ -473,3 +473,221 @@ test('3: the default log is COSTS.jsonl in the parent of the script folder, and 
   assert.equal(r.status, 0, r.stderr);
   assert.equal(lines(dir).length, 1);
 });
+
+// ==== T2: check, similar, table
+
+test('6.2: check passes a clean log, counts its records and lists grades and step-notes', (t) => {
+  const dir = folder(t);
+  write(dir, [
+    record({ findings: { major: 2, nit: 1 } }),
+    record({ id: '2030-01-01-0b0b', step: 'other', 'step-note': 'a smoke test', findings: { major: 3 } }),
+    record({ id: '2030-01-01-0c0c', step: 'other', 'step-note': 'a smoke test' }),
+    escape({ run: '2030-01-01-0a0a' }),
+    voided({ supersedes: '2030-01-01-0c0c' }),
+  ]);
+  assert.deepEqual(C.check(at(dir)), { problems: [], info: ['records: 3 run, 1 escape, 1 void', 'grades in use: major 5, nit 1', 'step-notes in use: a smoke test 2'] });
+  const r = cli('check', '--file', at(dir));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, 'records: 3 run, 1 escape, 1 void\ngrades in use: major 5, nit 1\nstep-notes in use: a smoke test 2\n');
+  fs.writeFileSync(at(dir), '');
+  assert.deepEqual(C.check(at(dir)), { problems: [], info: ['records: 0 run, 0 escape, 0 void', 'grades in use: none', 'step-notes in use: none'] });
+});
+
+const NO_ID = 'no usable id, so no record can supersede this line: delete it by hand and commit the log';
+const VOID_HAND = 'a void record, so no record can supersede this line: delete it by hand and commit the log';
+
+test('6.2: check fails on each of its conditions, with the line number, and not on a line a later line supersedes', (t) => {
+  const dir = folder(t);
+  const cases = [
+    // A bad line with no well-formed id cannot be superseded, and check says to delete it; one with an id is not told so.
+    [[record(), '{"kind":"run"'], ['line 2: not JSON', `line 2: ${NO_ID}`]],
+    [['[1]'], ['line 1: not an object', `line 1: ${NO_ID}`]],
+    [[record({ id: 'r1' })], ["line 1: id: the record's date, a hyphen and four hex characters", `line 1: ${NO_ID}`]],
+    [['{"kind":"run","date":"2030-01-01"}'], ["line 1: id: required (the record's date, a hyphen and four hex characters)", 'line 1: repo: required (lower-case letters, digits, dot, underscore, hyphen)',
+      `line 1: step: required (one of ${C.STEPS.join(', ')})`, 'line 1: model: required (lower-case letters, digits, dot, hyphen)',
+      'line 1: tokens: required (a whole number, zero or more)', `line 1: ${NO_ID}`]],
+    [[record({ tokens: -1 })], 'line 1: tokens: a whole number, zero or more'],
+    [[record({ id: '2030-01-02-0a0a' })], "line 1: id: its first ten characters are the record's date"],
+    [[record(), '', record()], 'line 3: id 2030-01-01-0a0a occurs twice'],
+    [[record(), escape({ id: '2030-01-01-0a0a' })], 'line 2: id 2030-01-01-0a0a occurs twice'],
+    [[record({ supersedes: '2030-01-01-0b0b' }), record({ id: '2030-01-01-0b0b' })], 'line 1: supersedes: no earlier record 2030-01-01-0b0b'],
+    [[escape(), record({ supersedes: '2030-01-01-0e0e' })], 'line 2: supersedes: 2030-01-01-0e0e is an escape record'],
+    [[escape({ run: '2030-01-01-0a0a' }), record()], 'line 1: run: no earlier run record 2030-01-01-0a0a'],
+    [[record(), record({ id: '2030-01-01-0b0b', supersedes: '2030-01-01-0a0a' }), record({ id: '2030-01-01-0c0c', supersedes: '2030-01-01-0a0a' })],
+      'line 3: supersedes: 2030-01-01-0a0a is already superseded; the record that stands is 2030-01-01-0b0b'],
+    [[record(), voided(), record({ id: '2030-01-01-0c0c', supersedes: '2030-01-01-0f0f' })],
+      'line 3: supersedes: 2030-01-01-0f0f is a void record, and a void is never superseded: record the run or escape again'],
+    // No record can supersede a void either, so a void with a problem is deleted by hand, and check says so.
+    [[record(), voided({ supersedes: '2030-01-01-ffff' })], ['line 2: supersedes: no earlier record 2030-01-01-ffff', `line 2: ${VOID_HAND}`]],
+    [[record(), record({ id: '2030-01-01-0b0b', supersedes: '2030-01-01-0a0a' }), voided()],
+      ['line 3: supersedes: 2030-01-01-0a0a is already superseded; the record that stands is 2030-01-01-0b0b', `line 3: ${VOID_HAND}`]],
+    [[record(), voided(), voided({ id: '2030-01-01-0f10', supersedes: '2030-01-01-0f0f' })],
+      ['line 3: supersedes: 2030-01-01-0f0f is a void record, and a void is never superseded: record the run or escape again', `line 3: ${VOID_HAND}`]],
+  ];
+  for (const [records, problem] of cases) {
+    write(dir, records);
+    assert.deepEqual(C.check(at(dir)).problems, [].concat(problem));
+  }
+  write(dir, [record(), escape({ run: '2030-01-01-ffff', 'found-by': 'x\ny' }), escape({ id: '2030-01-01-0e0f', supersedes: '2030-01-01-0e0e', run: '2030-01-01-0a0a' }),
+    '{"kind":"run","id":"2030-01-01-0b0b","tokens":-1}', voided({ supersedes: '2030-01-01-0b0b' })]);
+  assert.deepEqual(C.check(at(dir)).problems, []);
+  fs.writeFileSync(at(dir), JSON.stringify(record()));
+  assert.deepEqual(C.check(at(dir)).problems, ['the log does not end in a line end']);
+  const r = cli('check', '--file', at(dir));
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^the log does not end in a line end\nrecords: 1 run, 0 escape, 0 void\n/);
+});
+
+test('6.5: a log that does not exist or cannot be read refuses, for every reader', (t) => {
+  const dir = folder(t);
+  for (const args of [['check'], ['similar', 'implement'], ['table']]) {
+    const r = cli(...args, '--file', at(dir));
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /^no log at .*COSTS\.jsonl/);
+    assert.match(cli(...args, '--file', dir).stderr, /^cannot read .* \(EISDIR\)\n$/);
+  }
+});
+
+const run = (id, date, tokens, extra) => record({ id: `${date}-${id}`, date, tokens, ...extra });
+
+test('6.3: similar prints the spread of fresh runs and the last five, the newest first', (t) => {
+  const dir = folder(t);
+  write(dir, [
+    run('0001', '2030-01-09', 1000), run('0002', '2030-01-03', 3000000), run('0003', '2030-01-05', 2000),
+    run('0004', '2030-01-04', 4000), run('0005', '2030-01-08', 5000), run('0006', '2030-01-06', 7000, { model: 'sonnet-5.5', repo: 'other-repo' }),
+    run('0007', '2030-01-10', 999999, { resumed: true, total: 999999 }),
+    run('0008', '2030-01-10', 888888, { step: 'simplify', read: 'abc' }),
+    run('0009', '2030-01-10', 777777), run('0010', '2030-01-11', 666666, { supersedes: '2030-01-10-0009' }),
+    run('0011', '2030-01-11', 6000, { supersedes: '2030-01-11-0010' }),
+  ]);
+  assert.equal(C.similar(at(dir), 'implement').out, [
+    'implement: 7 fresh runs, min 1,000, median 5,000, max 3,000,000 tokens (2030-01-03 to 2030-01-11)',
+    'last 5:', '  2030-01-11  6,000  opus-5.5  demo', '  2030-01-09  1,000  opus-5.5  demo', '  2030-01-08  5,000  opus-5.5  demo',
+    '  2030-01-06  7,000  sonnet-5.5  other-repo', '  2030-01-05  2,000  opus-5.5  demo',
+  ].join('\n'));
+  assert.equal(C.similar(at(dir), 'implement', { model: 'opus-5.5' }).out.split('\n')[0],
+    'implement: 6 fresh runs, min 1,000, median 4,500, max 3,000,000 tokens (2030-01-03 to 2030-01-11)');
+  assert.equal(C.similar(at(dir), 'implement', { repo: 'other-repo' }).out,
+    'implement: 1 fresh run, min 7,000, median 7,000, max 7,000 tokens (2030-01-06 to 2030-01-06)\nlast 1:\n  2030-01-06  7,000  sonnet-5.5  other-repo');
+  assert.equal(C.similar(at(dir), 'simplify', { model: 'opus-5.5', repo: 'demo' }).out.split('\n')[0],
+    'simplify: 1 fresh run, min 888,888, median 888,888, max 888,888 tokens (2030-01-10 to 2030-01-10)');
+  assert.equal(cli('similar', 'implement', '--file', at(dir), '--model', 'sonnet-5.5', '--repo', 'other-repo').stdout.split('\n')[0],
+    'implement: 1 fresh run, min 7,000, median 7,000, max 7,000 tokens (2030-01-06 to 2030-01-06)');
+});
+
+test('6.3: the median of an even count is the mean of the middle two, rounded', (t) => {
+  const dir = folder(t);
+  write(dir, [run('0001', '2030-01-01', 10), run('0002', '2030-01-01', 1), run('0003', '2030-01-01', 4), run('0004', '2030-01-01', 9)]);
+  assert.match(C.similar(at(dir), 'implement').out, /min 1, median 7, max 10 tokens/);
+});
+
+test('6.3: with no run of the step, similar says not yet measured; a step not in the list refuses', (t) => {
+  const dir = folder(t);
+  write(dir, [run('0001', '2030-01-01', 10, { resumed: true, total: 10 })]);
+  assert.equal(C.similar(at(dir), 'implement').out, 'implement: not yet measured');
+  assert.equal(cli('similar', 'draft', '--file', at(dir)).stdout, 'draft: not yet measured\n');
+  refuses(() => C.similar(at(dir), 'build'), /^similar: give a step, one of reading-critique, /);
+  assert.equal(cli('similar', '--file', at(dir)).status, 2);
+  assert.match(cli('similar', 'draft', '--file', at(dir), '--since', '2030-01-01').stderr, /^similar: unknown flag --since/);
+});
+
+const TABLE = [
+  run('0001', '2030-01-10', 100000, { findings: { major: 2, nit: 0 } }),
+  run('0002', '2030-01-11', 300000, { findings: { major: 1, minor: 4 } }),
+  run('0003', '2030-01-12', 50002, { resumed: true, total: 350002 }),
+  run('0004', '2030-01-12', 80000, { step: 'clearing-review', read: 'abc', resumed: true, total: 200000 }),
+  run('0005', '2030-01-13', 70000, { step: 'draft' }),
+  run('0006', '2030-01-13', 999, { step: 'draft', supersedes: '2030-01-13-0005' }),
+  run('0007', '2030-01-13', 555, { step: 'draft', supersedes: '2030-01-13-0006' }),
+  escape({ id: '2030-01-12-e001', date: '2030-01-12', run: '2030-01-10-0001' }),
+  escape({ id: '2030-01-12-e002', date: '2030-01-12', run: '2030-01-12-0004' }),
+  escape({ id: '2030-01-13-e003', date: '2030-01-13', run: 'a run older than the log' }),
+  escape({ id: '2030-01-13-e004', date: '2030-01-13', run: '2030-01-12-0004', supersedes: '2030-01-12-e002' }),
+  escape({ id: '2030-01-13-e005', date: '2030-01-13', run: '2030-01-11-0002' }),
+  escape({ id: '2030-01-14-e006', date: '2030-01-14', run: '2030-01-13-0005' }),
+  // Two escapes whose id-shaped run names no run: one names an escape, one names nothing. Both are unlinked.
+  escape({ id: '2030-01-13-e007', date: '2030-01-13', run: '2030-01-12-e001' }),
+  escape({ id: '2030-01-13-e008', date: '2030-01-13', run: '2030-01-09-ffff' }),
+];
+
+test('6.4: table prints every column per step, the totals and the unlinked escapes', (t) => {
+  const dir = folder(t);
+  write(dir, TABLE);
+  assert.equal(C.table(at(dir)).out, [
+    '| Step | Runs | Fresh | Min | Median | Max | Tokens | Findings | Escapes |',
+    '|---|---|---|---|---|---|---|---|---|',
+    '| draft | 1 | 1 | 555 | 555 | 555 | 555 | - | 1 |',
+    '| implement | 3 | 2 | 100,000 | 200,000 | 300,000 | 450,002 | major 3 (150,001 each), minor 4 (112,501 each), nit 0 | 2 |',
+    '| clearing-review | 1 | 0 | - | - | - | 80,000 | - | 1 |',
+    '',
+    'total: 5 runs, 530,557 tokens, 7 escapes',
+    'escapes with no linked run: 3',
+  ].join('\n'));
+});
+
+test('6.4: the date range is inclusive at both ends; an escape in range counts on its run step, whatever the run date', (t) => {
+  const dir = folder(t);
+  write(dir, TABLE);
+  assert.equal(C.table(at(dir), { since: '2030-01-11', until: '2030-01-12' }).out.split('\n').slice(2).join('\n'), [
+    '| implement | 2 | 1 | 300,000 | 300,000 | 300,000 | 350,002 | major 1 (350,002 each), minor 4 (87,501 each) | 1 |',
+    '| clearing-review | 1 | 0 | - | - | - | 80,000 | - | 0 |',
+    '',
+    'total: 3 runs, 430,002 tokens, 1 escape',
+    'escapes with no linked run: 0',
+  ].join('\n'));
+  assert.equal(cli('table', '--file', at(dir), '--since', '2030-01-14', '--until', '2030-01-14').stdout, [
+    '| Step | Runs | Fresh | Min | Median | Max | Tokens | Findings | Escapes |',
+    '|---|---|---|---|---|---|---|---|---|',
+    '| draft | 0 | 0 | - | - | - | 0 | - | 1 |',
+    '',
+    'total: 0 runs, 0 tokens, 1 escape',
+    'escapes with no linked run: 0',
+    '',
+  ].join('\n'));
+  assert.match(C.table(at(dir), { since: '2030-01-12' }).out, /\| implement \| 1 \| 0 \|/);
+  assert.match(C.table(at(dir), { until: '2030-01-10' }).out, /total: 1 run, 100,000 tokens, 0 escapes/);
+  refuses(() => C.table(at(dir), { since: 'january' }), /^table: --since takes an ISO date/);
+  refuses(() => C.table(at(dir), { until: '2030-02-30' }), /^table: --until takes an ISO date/);
+  assert.match(cli('table', '--file', at(dir), '--model', 'opus-5.5').stderr, /^table: unknown flag --model/);
+});
+
+test('6.5: similar and table skip a line that is not a valid record and say so, unless a later line supersedes it', (t) => {
+  const dir = folder(t);
+  write(dir, [run('0001', '2030-01-01', 10), '{"kind":"run","id":"2030-01-01-0b', record({ id: '2030-01-01-0c0c', tokens: -5 }), run('0002', '2030-01-01', 30)]);
+  const s = cli('similar', 'implement', '--file', at(dir));
+  assert.equal(s.status, 0);
+  assert.match(s.stdout, /^implement: 2 fresh runs, min 10, median 20, max 30 /);
+  assert.equal(s.stderr, 'costs: skipped 2 lines that are not a valid record; run check\n');
+  write(dir, [run('0001', '2030-01-01', 10), 'torn']);
+  const tb = cli('table', '--file', at(dir));
+  assert.equal(tb.status, 0);
+  assert.match(tb.stdout, /total: 1 run, 10 tokens, 0 escapes/);
+  assert.equal(tb.stderr, 'costs: skipped 1 line that is not a valid record; run check\n');
+  write(dir, [record({ tokens: -5 }), run('0001', '2030-01-01', 10, { supersedes: '2030-01-01-0a0a' })]);
+  assert.equal(cli('table', '--file', at(dir)).stderr, '');
+});
+
+test('4.4: a void drops its target and counts as nothing: no run, escape, row, total, list or skipped line; an escape naming a voided run still counts on its step', (t) => {
+  const dir = folder(t);
+  write(dir, [
+    run('0001', '2030-01-10', 100), run('0002', '2030-01-10', 900),
+    escape({ id: '2030-01-10-e001', date: '2030-01-10', run: '2030-01-10-0001' }), escape({ id: '2030-01-10-e002', date: '2030-01-10', run: '2030-01-10-0001' }),
+    escape({ id: '2030-01-10-e003', date: '2030-01-10', run: 'an older run' }), escape({ id: '2030-01-10-e004', date: '2030-01-10', run: '2030-01-10-0002' }),
+    '{"kind":"run","id":"2030-01-10-0b0b","tokens":-1}',
+    voided({ id: '2030-01-11-0f01', date: '2030-01-11', supersedes: '2030-01-10-0002' }),
+    voided({ id: '2030-01-11-0f02', date: '2030-01-11', supersedes: '2030-01-10-e002' }),
+    voided({ id: '2030-01-11-0f03', date: '2030-01-11', supersedes: '2030-01-10-0b0b' }),
+    voided({ id: '2030-01-11-0f04', date: '2030-01-11', supersedes: '2030-01-10-e003' }),
+  ]);
+  assert.deepEqual(C.similar(at(dir), 'implement'), {
+    out: 'implement: 1 fresh run, min 100, median 100, max 100 tokens (2030-01-10 to 2030-01-10)\nlast 1:\n  2030-01-10  100  opus-5.5  demo', skipped: 0,
+  });
+  assert.deepEqual(C.table(at(dir)), { out: [
+    '| Step | Runs | Fresh | Min | Median | Max | Tokens | Findings | Escapes |',
+    '|---|---|---|---|---|---|---|---|---|',
+    '| implement | 1 | 1 | 100 | 100 | 100 | 100 | - | 2 |',
+    '',
+    'total: 1 run, 100 tokens, 2 escapes',
+    'escapes with no linked run: 0',
+  ].join('\n'), skipped: 0 });
+});
