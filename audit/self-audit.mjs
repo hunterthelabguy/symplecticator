@@ -181,8 +181,9 @@ function floor(t) {
   if (charter.size === 0) return [`${CHARTER}: no numbered "Practice floor" section`];
   for (const p of prose(t)) {
     // "floor 3", "floor item 3" or "floor-item 3" cite one item; only "floor items" takes a list: "floor items 3,
-    // 5 and 9". A line may break before or after "item" or "items", never between "floor" and a bare number.
-    for (const m of t.get(p).matchAll(/\bfloor(?:(?:[ -]|[ \t]*\n[ \t]*)item(?:[ -]|[ \t]*\n[ \t]*)|[ -])(\d+)\b|\bfloor(?:[ -]|[ \t]*\n[ \t]*)items(?:[ -]|[ \t]*\n[ \t]*)(\d+(?:(?:,? and |, | or )\d+)*)\b/gi)) {
+    // 5 and 9". A line may break before "item" or "items", never before a number: a number that starts a line
+    // may be a list item's marker.
+    for (const m of t.get(p).matchAll(/\bfloor(?:(?:[ -]|[ \t]*\n[ \t]*)item[ -]|[ -])(\d+)\b|\bfloor(?:[ -]|[ \t]*\n[ \t]*)items[ -](\d+(?:(?:,? and |, | or )\d+)*)\b/gi)) {
       for (const n of (m[1] ?? m[2]).split(/\D+/)) if (!charter.has(n)) out.push(`${p} cites floor item ${n}; ${CHARTER} has none`);
     }
   }

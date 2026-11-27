@@ -198,11 +198,14 @@ test('floor: every spelling of a citation, and a list of items', () => {
   expects(check, add('skills/tdd/SKILL.md', '\nSee floor items 3 or 12.\n'), 'cites floor item 12');
   expects(check, add('skills/tdd/SKILL.md', '\nSee floor items 3, 5, and 12.\n'), 'cites floor item 12');
   expects(check, add('skills/tdd/SKILL.md', '\nSee the charter floor\nitem 0.\n'), 'cites floor item 0');
-  expects(check, add('skills/tdd/SKILL.md', '\nSee floor items\n3 and 12.\n'), 'cites floor item 12');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee the charter floor\nitems 3 and 12.\n'), 'cites floor item 12');
+  expects(check, add('skills/tdd/SKILL.md', '\n- See the floor\n  item 0.\n'), 'cites floor item 0');
   assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\nSee floor items 3, 5 and 9.\n')), []);
-  // Only "floor items" takes a list: a count after one cited item is no citation, nor is a list item after a
-  // line that ends in "floor".
+  // Only "floor items" takes a list: a count after one cited item is no citation, nor is a list item's marker
+  // after a line that ends in "floor", "floor item" or "floor items".
   assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\nMutants (floor 9, 20 of 20 killed).\nThe practice floor\n12. A list item.\n')), []);
+  assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\n8. CI green\n9. Tests for each floor item\n10. Mutation score per area\n')), []);
+  assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\n9. Tests for the floor items\n10. Mutation score\n')), []);
   // A tenth item, in the charter and in setup's list alike, is a floor item like the others.
   assert.deepEqual(problems(check, (tree) => {
     swap('templates/charter.template.md', '\n9. Tests exactly as thick', '\n10. A tenth item.\n9. Tests exactly as thick')(tree);
