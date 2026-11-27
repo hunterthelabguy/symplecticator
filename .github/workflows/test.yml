@@ -48,6 +48,11 @@ jobs:
         run: node --test scripts/guard-oracle.test.mjs
       - if: ${{ !cancelled() }}
         run: node --test scripts/costs.test.mjs
+      # What the prose says about this repository against its files.
+      - if: ${{ !cancelled() }}
+        run: node --test audit/self-audit.test.mjs
+      - if: ${{ !cancelled() }}
+        run: node audit/self-audit.mjs
 
   guard-windows:
     # The two guard suites and the costs suite alone on Windows, where the guard's drive-letter, /c/, mount and
