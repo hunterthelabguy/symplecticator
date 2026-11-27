@@ -1,8 +1,12 @@
 // self-audit.test.mjs: prove each check of self-audit.mjs can fail. The repository as it stands is the passing
-// case; each test then plants one fault in a copy of that tree and expects its check, by name, to report it.
+// case (the first test); the tests after it plant faults in a copy of that tree and expect the check, by name, to
+// report each one. The records note, which never fails, is tested for when it appears and when it does not.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { audit, readTree, CHECKS } from './self-audit.mjs';
 
@@ -38,14 +42,14 @@ test('the repository as it stands passes every check', () => {
 
 test('suites: one left out of the workflow, the setup check or the verify line; a new one; a wrong count', () => {
   const check = 'every suite is named where the verification is described';
-  expects(check, swap('.github/workflows/test.yml', 'run: bash scripts/perturb-hook.test.sh', 'run: true'), 'test.yml does not name scripts/perturb-hook.test.sh');
+  expects(check, swap('.github/workflows/test.yml', 'run: bash scripts/perturb-hook.test.sh', 'run: true'), 'the suites job does not name scripts/perturb-hook.test.sh');
   expects(check, swap(SETUP, 'bash ~/.claude/scripts/commit-scan.test.sh', 'the scan suite'), 'step 10 does not name scripts/commit-scan.test.sh');
   expects(check, swap('CLAUDE.md', '`node --test audit/self-audit.test.mjs`', 'the audit suite'), 'the Verify bullet does not name audit/self-audit.test.mjs');
   expects(check, add('scripts/new.test.sh', 'true\n'), 'the Verify bullet does not name scripts/new.test.sh',
-    'test.yml does not name scripts/new.test.sh', 'step 10 does not name scripts/new.test.sh', 'README.md says seven suites; there are 8', 'CLAUDE.md says eight suites; there are 9');
+    'the suites job does not name scripts/new.test.sh', 'step 10 does not name scripts/new.test.sh', 'README.md says seven suites; there are 8', 'CLAUDE.md says eight suites; there are 9');
   // A suite of the repository's own is not asked of setup, which runs on the adopter's machine.
   const own = problems(check, add('audit/new.test.mjs', ''));
-  assert.ok(own.some((p) => p.includes('test.yml does not name audit/new.test.mjs')));
+  assert.ok(own.some((p) => p.includes('the suites job does not name audit/new.test.mjs')));
   assert.ok(!own.some((p) => p.includes('step 10')));
 });
 
@@ -126,4 +130,97 @@ test('a check that cannot run fails, and the plan files still in docs/ are a not
   assert.ok(results.some((r) => r.problems.some((p) => p.includes('the check could not run: unreadable'))));
   const held = [...REAL.keys()].some((p) => p.startsWith('docs/'));
   assert.equal(audit(REAL).notes.some((n) => n.includes('holds no plan')), held);
+});
+
+test('records: a note only, never a check, and only while CLAUDE.md says the repository holds none', () => {
+  assert.ok(!CHECKS.some(([name]) => name.includes('records')), 'the records note must not be listed, or printed, as a check');
+  const tree = new Map(REAL);
+  tree.set('docs/a-record.md', 'a plan\n');
+  assert.ok(audit(tree).notes.some((n) => n.includes('holds no plan')));
+  swap('CLAUDE.md', 'none in this repository', 'kept in docs/')(tree);
+  assert.ok(!audit(tree).notes.some((n) => n.includes('holds no plan')));
+});
+
+test('suites: the Linux and macOS job must run them, not only some other job', () => {
+  const check = 'every suite is named where the verification is described';
+  const moved = (tree) => {
+    const yml = tree.get('.github/workflows/test.yml');
+    const step = '      - if: ${{ !cancelled() }}\n        run: node --test audit/self-audit.test.mjs\n';
+    assert.ok(yml.includes(step), 'the workflow no longer holds the audit suite step');
+    tree.set('.github/workflows/test.yml', `${yml.replace(step, '')}      - run: node --test audit/self-audit.test.mjs\n`);
+  };
+  expects(check, moved, 'the suites job does not name audit/self-audit.test.mjs');
+});
+
+test('links: a folder is a target; a titled link and a reference-style link are read too', () => {
+  const check = 'relative links resolve';
+  assert.deepEqual(problems(check, add('README.md', '\nSee [the skills](skills/) and [build](skills/build).\n')), []);
+  expects(check, add('README.md', '\nSee [nothing](skills/no-such-skill/).\n'), 'links to skills/no-such-skill/');
+  expects(check, add('README.md', '\nSee [titled](no-such-titled.md "a title").\n'), 'links to no-such-titled.md');
+  expects(check, add('README.md', '\n[ref]: no-such-ref.md\n'), 'links to no-such-ref.md');
+  assert.deepEqual(problems(check, add('README.md', '\n[site]: https://example.com/x\n[titled](PRIMER.md "the primer")\n')), []);
+});
+
+test('scripts: names in the workflow, and installed spellings through $HOME or .claude/', () => {
+  const check = 'named scripts exist';
+  expects(check, add('.github/workflows/test.yml', '\n      - run: bash scripts/no-such-step.test.sh\n'), 'test.yml names scripts/no-such-step.test.sh');
+  expects(check, add('skills/tdd/SKILL.md', '\nRun `bash "$HOME/.claude/scripts/no-such-home.sh"`.\n'), 'names scripts/no-such-home.sh');
+  expects(check, add('skills/tdd/SKILL.md', '\nRun `bash .claude/scripts/no-such-dot.sh`.\n'), 'names scripts/no-such-dot.sh');
+  assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\nRun `bash "$HOME/.claude/scripts/ground-truth.sh"`.\n')), []);
+});
+
+test('user-only: a quoted true counts as user-only', () => {
+  expects('user-only skills are listed in the addendum', (tree) => {
+    swap('skills/perturb/SKILL.md', 'disable-model-invocation: true', 'disable-model-invocation: "true"')(tree);
+    swap('templates/addendum.template.md', '- `/perturb`:', '- perturb:')(tree);
+  }, 'does not name /perturb');
+});
+
+test('floor: every spelling of a citation, and a list of items', () => {
+  const check = 'cited floor items exist';
+  expects(check, add('skills/tdd/SKILL.md', '\nSee floor 0.\n'), 'cites floor item 0');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee floor-item 0.\n'), 'cites floor item 0');
+  expects(check, add('skills/tdd/SKILL.md', '\nSee floor items 3 and 12.\n'), 'cites floor item 12');
+  assert.deepEqual(problems(check, add('skills/tdd/SKILL.md', '\nSee floor items 3, 5 and 9.\n')), []);
+  // A tenth item, in the charter and in setup's list alike, is a floor item like the others.
+  assert.deepEqual(problems(check, (tree) => {
+    swap('templates/charter.template.md', '\n9. Tests exactly as thick', '\n10. A tenth item.\n9. Tests exactly as thick')(tree);
+    swap(SETUP, '\n9. **Test thickness by mutation testing**', '\n10. A tenth item.\n9. **Test thickness by mutation testing**')(tree);
+    add('skills/tdd/SKILL.md', '\nSee floor item 10.\n')(tree);
+  }), []);
+});
+
+test('em dash: in a script and in docs/ too, not only in skills', () => {
+  const dash = String.fromCharCode(0x2014);
+  expects('no em dash', add('scripts/ground-truth.sh', `\n# a ${dash} b\n`), 'scripts/ground-truth.sh holds an em dash');
+  expects('no em dash', add('docs/a-record.md', `a ${dash} b\n`), 'docs/a-record.md holds an em dash');
+});
+
+test("numbers: the addendum's cap drifts, and the addendum outgrows it", () => {
+  const check = 'repeated numbers agree, and templates fit their caps';
+  expects(check, swap(SETUP, 'addendum under\n  about 50', 'addendum under\n  about 40'), 'line cap for the addendum');
+  expects(check, add('templates/addendum.template.md', 'one more line\n'.repeat(20)), 'templates/addendum.template.md has');
+});
+
+test("names: a setup skill's frontmatter name, too", () => {
+  expects('skill names match their folders', swap(SETUP, 'name: setup-config', 'name: setup'), '.claude/skills/setup-config/SKILL.md is named setup');
+});
+
+test('move together: a skill that runs a script and is not on the update rule', () => {
+  expects('files that run scripts move with scripts/', add('skills/tdd/SKILL.md', '\nRun `bash ~/.claude/scripts/ground-truth.sh`.\n'), 'does not name skills/tdd');
+});
+
+test('readTree: an untracked file not ignored is read; an ignored one is not', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'self-audit-'));
+  try {
+    execFileSync('git', ['-C', dir, 'init', '-q']);
+    writeFileSync(join(dir, '.gitignore'), 'ignored.md\n');
+    writeFileSync(join(dir, 'new.md'), 'new\n');
+    writeFileSync(join(dir, 'ignored.md'), 'ignored\n');
+    const tree = readTree(dir);
+    assert.equal(tree.get('new.md'), 'new\n');
+    assert.ok(!tree.has('ignored.md'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

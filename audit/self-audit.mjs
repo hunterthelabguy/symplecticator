@@ -22,8 +22,6 @@ const EM_DASH = String.fromCharCode(0x2014);
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
 // Claude Code's own commands the prose may name; any other /name must be a skill or command of this repository.
 const BUILT_IN = new Set(['clear', 'compact', 'usage']);
-// Files an adopter writes, which the prose names and this repository does not hold.
-const ADOPTER_FILES = new Set(['scripts/ground-truth.conf']);
 
 const SETUP = '.claude/skills/setup-config/SKILL.md';
 const CHARTER = 'templates/charter.template.md';
@@ -64,7 +62,7 @@ function suites(t, note) {
   const own = [...t.keys()].filter((p) => /^audit\/[^/]+\.test\.(sh|mjs)$/.test(p));
   const places = [
     ['CLAUDE.md, the Verify bullet', section(t.get('CLAUDE.md') ?? '', /\*\*Verify:\*\*/, /^- \*\*(?!Verify)/), [...installed, ...own]],
-    ['.github/workflows/test.yml', t.get('.github/workflows/test.yml') ?? null, [...installed, ...own]],
+    ['.github/workflows/test.yml, the suites job', section(t.get('.github/workflows/test.yml') ?? '', /^  suites:\s*$/, /^  [A-Za-z0-9_-]+:\s*$/), [...installed, ...own]],
     [`${SETUP}, step 10`, section(t.get(SETUP) ?? '', /^## 10\./, /^## 11\./), installed],
   ];
   for (const [where, text, wanted] of places) {
@@ -88,10 +86,13 @@ function links(t) {
   const out = [];
   const has = (p) => t.has(p) || [...t.keys()].some((k) => k.startsWith(`${p}/`));
   for (const p of prose(t)) {
-    for (const m of t.get(p).matchAll(/\]\(([^)\s]+)\)/g)) {
+    const text = t.get(p);
+    // Inline links, a title after the target or not, and reference-style definitions.
+    for (const m of [...text.matchAll(/\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g), ...text.matchAll(/^ {0,3}\[[^\]]+\]:\s*(\S+)/gm)]) {
       const target = m[1].replace(/#.*$/, '');
       if (target === '' || /^[a-z][a-z0-9+.-]*:/i.test(target)) continue;
-      const resolved = posix.normalize(posix.join(posix.dirname(p), target));
+      // A folder link may end in a slash; the folder is found by the files under it.
+      const resolved = posix.normalize(posix.join(posix.dirname(p), target)).replace(/\/$/, '');
       if (!has(resolved)) out.push(`${p} links to ${m[1]}, which does not exist`);
     }
   }
@@ -116,14 +117,14 @@ function examples(t) {
   return out;
 }
 
-// Every script the prose, a settings hook or the workflow names is in scripts/ (or, named with no ~/.claude
-// before it, in a scripts folder beside the file that names it).
+// Every script the prose, a settings hook or the workflow names is in scripts/ (or, named with no ~/.claude,
+// $HOME/.claude or .claude before it, in a scripts folder beside the file that names it).
 function scripts(t) {
   const out = [];
   for (const p of [...t.keys()].filter((k) => !isRecord(k) && /\.(md|json|yml)$/.test(k))) {
-    for (const m of t.get(p).matchAll(/(?<![\w./-])(?:~\/\.claude\/)?(scripts\/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.(?:sh|mjs|conf))\b/g)) {
-      const beside = !m[0].startsWith('~') && t.has(posix.join(posix.dirname(p), m[1]));
-      if (!t.has(m[1]) && !beside && !ADOPTER_FILES.has(m[1])) out.push(`${p} names ${m[1]}, which does not exist`);
+    for (const m of t.get(p).matchAll(/(?<![\w./-])((?:~|\$HOME|\$\{HOME\})\/\.claude\/|\.claude\/)?(scripts\/[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.(?:sh|mjs|conf))\b/g)) {
+      const beside = !m[1] && t.has(posix.join(posix.dirname(p), m[2]));
+      if (!t.has(m[2]) && !beside) out.push(`${p} names ${m[2]}, which does not exist`);
     }
   }
   return [...new Set(out)];
@@ -163,7 +164,7 @@ function userOnly(t) {
   if (list === null) return [`${ADDENDUM}: no "User-only skills" section`];
   const files = [...skillNames(t).map((n) => [n, `skills/${n}/SKILL.md`]), ...commandNames(t).map((n) => [n, `commands/${n}.md`])];
   for (const [n, p] of files) {
-    if (/^disable-model-invocation: true$/m.test(frontmatter(t.get(p))) && !list.includes(`\`/${n}\``)) {
+    if (/^disable-model-invocation:\s*["']?true["']?\s*$/m.test(frontmatter(t.get(p))) && !list.includes(`\`/${n}\``)) {
       out.push(`${p} is user-only, and ${ADDENDUM}'s "User-only skills" list does not name /${n}`);
     }
   }
@@ -173,12 +174,13 @@ function userOnly(t) {
 // A cited floor item exists in the charter template, and setup's list of the floor has the same numbers.
 function floor(t) {
   const out = [];
-  const items = (text) => new Set([...(text ?? '').matchAll(/^(\d)\. /gm)].map((m) => m[1]));
+  const items = (text) => new Set([...(text ?? '').matchAll(/^(\d+)\. /gm)].map((m) => m[1]));
   const charter = items(section(t.get(CHARTER) ?? '', /^## Practice floor/, /^## (?!Practice floor)/));
   if (charter.size === 0) return [`${CHARTER}: no numbered "Practice floor" section`];
   for (const p of prose(t)) {
-    for (const m of t.get(p).matchAll(/\bfloor(?:[ -]item)?[ -](\d)\b/gi)) {
-      if (!charter.has(m[1])) out.push(`${p} cites floor item ${m[1]}; ${CHARTER} has none`);
+    // "floor 3", "floor item 3", "floor-item 3", and a list: "floor items 3, 5 and 9".
+    for (const m of t.get(p).matchAll(/\bfloor(?:[ -]items?)?[ -](\d+(?:(?:,? and |, | or )\d+)*)\b/gi)) {
+      for (const n of m[1].split(/\D+/)) if (!charter.has(n)) out.push(`${p} cites floor item ${n}; ${CHARTER} has none`);
     }
   }
   const round = items(section(t.get(SETUP) ?? '', /^## 4\. Round 2/, /^## 5\./));
@@ -274,12 +276,11 @@ function moveTogether(t) {
   return out;
 }
 
-// Not a failure: the maintainer's own pending step, named so it is not forgotten.
+// Not a check, so it prints no ok line: the maintainer's own pending step, named so it is not forgotten.
 function records(t, note) {
   const none = /\*\*Living plan, archival spec, ledger:\*\* none in this repository/.test((t.get('CLAUDE.md') ?? '').replace(/\s+/g, ' '));
   const held = [...t.keys()].filter(isRecord);
   if (none && held.length) note(`CLAUDE.md says this repository holds no plan; docs/ holds ${held.length} file(s): ${held.join(', ')}`);
-  return [];
 }
 
 export const CHECKS = [
@@ -297,8 +298,9 @@ export const CHECKS = [
   ['skill names match their folders', names],
   ["the guard's tool list matches /perturb's text", guardTools],
   ['files that run scripts move with scripts/', moveTogether],
-  ['records the repository says it does not hold', records],
 ];
+// Notes that never fail: run after the checks, and printed as notes only.
+const NOTES = [['records the repository says it does not hold', records]];
 
 // Run every check on a tree; a check that throws is a failure of that check, never a pass.
 export function audit(tree) {
@@ -308,6 +310,9 @@ export function audit(tree) {
     let problems;
     try { problems = check(tree, (n) => notes.push(n)); } catch (e) { problems = [`the check could not run: ${e.message}`]; }
     results.push({ name, problems });
+  }
+  for (const [name, write] of NOTES) {
+    try { write(tree, (n) => notes.push(n)); } catch (e) { results.push({ name, problems: [`the note could not run: ${e.message}`] }); }
   }
   return { results, notes, failed: results.some((r) => r.problems.length) };
 }
