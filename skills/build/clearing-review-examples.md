@@ -12,7 +12,8 @@ kept.
 
 The first three entries come from one real run, on 2026-11-12, in a
 repository that is not public, so they name no PR; C5's project name is
-left out too. Retire them as your own runs produce entries.
+left out too. C4 and C6 are from symplecticator, the repository this
+config comes from. Retire them as your own runs produce entries.
 
 Format for an entry:
 
@@ -72,3 +73,30 @@ full suite, and under it the code refused a file it had written. One test
 closed it. Lesson: a fix that adds a mode flag to shared code leaves each
 old test pinning only the branch it reaches, so mutate every operand inside
 the new branch.
+
+## C6. Seven rounds on one class, found by probes nobody kept (incorrect, then correct)
+
+symplecticator PR 13, 2026-11-22 to 2026-11-24, replayed 2026-11-25. The
+diff held a guard that reads a Bash command and decides which folder bash
+will be in when a removal or a push runs. Clearing took ten rounds (three
+in the build, then seven after it). Rounds 1 to 7 each found one more
+command the guard misplaced (a `cd` with an option, a `cd` bash refuses,
+`cd X || exit`, a `cd` behind `nohup`, one in a backgrounded list,
+`! cd A && cd B`, a Git Bash mount path). Every one was found by probes
+run by hand against real bash and then thrown away, and round 6's was a
+regression a fix round made, as was round 8's. Afterwards the probes were
+written once, as a generator with bash as the oracle
+(`scripts/guard-oracle.mjs`), and run against the guard as each round had
+read it. Of 923 generated commands that harmed a canary file in real bash,
+the guard as it first landed let 340 through; the heads rounds 1 to 7 read
+let through 340, 295, 89, 48, 20, 19 and 19; the head round 8 read, and
+every later head measured, none. The same run named round 6's regression,
+a push after `! cd A && cd B`, as new at the commit round 6 read and gone
+at the next, and named round 8's, a write tool handed a path with no
+drive letter, the same way. Lesson: when the code under review predicts what
+another program will do, the first round's deliverable is the generator,
+checked in as a test, and the fix is sized from its output. And a
+generator that harms nothing checks nothing: the first replay's push
+commands all came back harmless, because on Windows the stand-in git was
+not on PATH, so that run had measured pushes not at all. The suite now
+fails when a family of commands does no harm.
