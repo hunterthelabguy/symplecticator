@@ -8,25 +8,35 @@ one subcommand per check), appends one JSON row per result to
 `~/.claude/grades.jsonl` and prints the term's table. A fixture is a
 repository at a commit plus a key of the faults known to be there: three
 ship under `grading/fixtures/` (this repository's PR 13, replayed), and
-more are minted under `~/.claude/grading/fixtures/` from logged escapes
-and from history. A user-only command, `/grade` (`commands/grade.md`),
-runs a step on a fixture in an ordinary session, so the config graded is
-the config in use; `/handoff` gains a block check and minting.
+more are minted under `~/.claude/grading/local/` from logged escapes and
+from history. A user-only command, `/grade` (`commands/grade.md`), runs a
+step on a fixture in an ordinary session, so the config graded is the
+config in use; `/handoff` gains a block check and minting.
 **Spec:** `~/.claude/specs/grading.md` (the owner's private copy). This
-plan carries everything a task needs; the spec decides where they differ.
-**Verify:** `bash scripts/ground-truth.test.sh && bash scripts/build-stop-gate.test.sh && node --test scripts/ledger.test.mjs && bash scripts/commit-scan.test.sh && node --test scripts/perturb-guard.test.mjs && bash scripts/perturb-hook.test.sh && node --test scripts/grade.test.mjs`
+plan carries everything a task needs; the spec decides where they differ,
+except where a choice below (the owner's review list) says otherwise.
+**Verify:** `bash scripts/ground-truth.test.sh && bash scripts/build-stop-gate.test.sh && node --test scripts/ledger.test.mjs && bash scripts/commit-scan.test.sh && node --test scripts/perturb-guard.test.mjs && bash scripts/perturb-hook.test.sh && node --test scripts/guard-oracle.test.mjs && node --test scripts/grade.test.mjs`
 
 This plan file lives on its pull request's branch and leaves the
 repository by a docs pull request after merge (see "After merge").
 
 How it was built: every code block below was written and run in a scratch
-tree of main at 8e8a24a on Windows 11 (Git Bash, node 24.14.1, git 2.54).
+tree of main at 75995af on Windows 11 (Git Bash, node 24.14.1, git 2.54).
 A script then applied the tasks in order, exactly as written here, to a
 fresh export of main at that commit, ran each task's red and green steps
-and each named mutant alone on the full suite (with the oracle beside the
-script), and checked that the files it ended with are, byte for byte, the
-tested files. Every expected output quoted below is copied from those
-runs. With the oracle present the full suite ran 23 pass, 0 fail, 0 skipped, of 23.
+and each named mutant alone on the full suite, and checked that the files
+it ended with are, byte for byte, the tested files. The oracle
+(`scripts/guard-oracle.mjs`, pull request 16) is on main, so no test
+skips. Every expected output quoted below is copied from those runs.
+After the mutant runs the full suite ran 28 pass, 0 fail, 0 skipped, of 28.
+
+This version folds the plan's first executing critique, which applied
+every task as written and probed what the drafter's runs could not show:
+the leak check flagged the fixture's own diff, the runner's checkout kept
+later commits in its reflog, the handoff check called true headers false,
+a rescored run counted its own new fault as a hit, a grown key would have
+been overwritten by the next update, and `--from-history` read only
+first-parent commits.
 
 ## Global constraints
 
@@ -42,8 +52,9 @@ runs. With the oracle present the full suite ran 23 pass, 0 fail, 0 skipped, of 
   spawns an adjudicator and hands its verdicts to the script.
 - Exit codes: 0 done; 1 the check found something (a contradiction, a
   leak, a draft fixture, a probe that no longer reproduces); 2 refused or
-  unusable input, nothing written. `GRADE_HOME` (default `~/.claude`)
-  holds `grades.jsonl`; `GRADE_TODAY` fixes the date for tests.
+  unusable input (malformed JSON among it), nothing written. `GRADE_HOME`
+  (default `~/.claude`) holds `grades.jsonl` and `grading/`;
+  `GRADE_TODAY` fixes the date for tests.
 - Fixture (`fixture.json`): `id`, `step` (`clearing-review`,
   `reading-critique`, `executing-critique`, `handoff`), `source`, `repo`
   (a URL or a local path), `head`, `base`, `held_out` (examples a run may
@@ -52,56 +63,58 @@ runs. With the oracle present the full suite ran 23 pass, 0 fail, 0 skipped, of 
   `lines`; `[0, 0]` is the whole file), optional `source`, `probe` and
   `fix_commit`), and, written by the script, `history`, `status` (`ready`
   or `draft`) and `self_check`.
+- Where fixtures live: shipped ones in `grading/fixtures/<id>/`, which
+  setup copies to `~/.claude/grading/fixtures/` and replaces on update;
+  minted ones, and the copy `score` writes when a run grows a fixture's
+  key, in `~/.claude/grading/local/<id>/`, which nothing ships or
+  replaces. `/grade` reads `local/<id>/` where it exists, else
+  `fixtures/<id>/`.
 - Row (one JSON line in `grades.jsonl`): `date`, `config` (the
   `~/.claude` commit, or `unversioned`), `kind` (`fixture`, `handoff`,
   `coldstart`, `perturb`, `cite`, `reasks`, `field`) and that kind's
   counts; a `fixture` row adds `step`, `fixture`, `head`, `run`, `model`,
   `tokens`, `held_out`, `without`, `leak_flags`, `key_size`, `hits`,
   `findings`, `severe_unmatched`, `false_alarms`, `new_faults`,
-  `unadjudicated`, `minor_unmatched`.
+  `unadjudicated`, `minor_unmatched` and `settled` (the verdict that
+  settled each unmatched severe finding, with `by`: `guard` or
+  `adjudicator`); a `field` row adds `steps`, `tags`, `unread` and
+  `escapes_alone`.
 - A finding is a paragraph or list item of a report; its severity is its
-  own leading label, else its heading's, else major; nothing under a
-  heading that starts "Notes" is a finding.
-- The guard probes use `scripts/guard-oracle.mjs`, which pull request 16
-  adds. Where it is not beside `grade.mjs`, the two tests that need it
-  skip by name, and `score` runs no probe.
+  own leading label (after any list marker), else its heading's, else
+  major; nothing under a heading that starts "Notes" is a finding.
+- The guard probes use `scripts/guard-oracle.mjs`. Where it is not beside
+  `grade.mjs`, the three tests that need it skip by name, and `score`
+  runs no probe.
 
 ## File map
 
 | File | Job |
 |---|---|
 | `scripts/grade.mjs` (create) | The grader: rows, fixtures, findings, scoring, leaks, the table (T1); the guard probe (T2); the shipped fixtures' own check (T3); the handoff check (T4); minting (T5); citations and re-asks (T6); field recall and perturb rows (T7). |
-| `scripts/grade.test.mjs` (create) | Its suite, one block per task, each test shown able to fail by a named mutant. |
+| `scripts/grade.test.mjs` (create) | Its suite, one block per task; every test is the only one failing at least one named mutant (the mutant steps list each mutant's failing tests). |
 | `grading/fixtures/pr13-round{1,4,8}/fixture.json` (create) | The reference fixtures (T3). |
 | `commands/grade.md` (create) | `/grade`, the runner (T8). |
 | `commands/handoff.md` (modify) | The block check before emitting (T4); minting after reflect (T5). |
-| `commands/reflect.md` (modify) | Escapes also go to `ESCAPES.md`, naming the commits (T5). |
+| `commands/reflect.md` (modify) | Escapes also go to `ESCAPES.md`, naming the commits (T5); the `Re-asked:` line (T6). |
+| `skills/spec-first/SKILL.md`, `skills/critique/SKILL.md` (modify) | The `Re-asked:` line where each writes ledger entries (T6). |
 | `.github/workflows/test.yml`, `CLAUDE.md`, `README.md` caption (modify) | The suite joins verify and CI (T1). |
 | `.claude/skills/setup-config/SKILL.md`, `README.md`, `templates/charter.template.md`, `templates/addendum.template.md` (modify) | Setup installs and tests the grader; the docs name it (T9). |
 
-Every task edits `scripts/grade.mjs` or its suite, so the tasks run one
-after another (T1 to T9); none can run beside another without a merge
-conflict in those two files.
+T1 to T8 each edit `scripts/grade.mjs` or its suite, so they run one
+after another; none can run beside another without a merge conflict in
+those two files. T9 edits only setup and docs, `README.md` among them,
+which T1 also edits; it runs last.
 
 ## Preflight (by hand, before `/build`; not a precondition)
 
-1. Rebase onto main. Pull request 16 (the oracle) and the pull requests
-   mined from the 2026-11-25 showcase change `CLAUDE.md`'s Verify bullet,
-   the workflow, the README caption, setup's step 10 and the addendum
-   template's user-only list. Where an old text in T1 or T9 no longer
-   matches, re-read the file and make the same change to what is there,
-   counting suites from the base (the caption's count is the base's plus
-   one).
-2. Whether pull request 16 is merged. If not, T2 and T3's oracle tests
-   skip, and T3's by-hand probe check waits for it.
-3. Whether a subagent spawned from an ordinary session sees the user
+1. Rebase onto main if it has moved past 75995af. Where an old text in
+   T1, T6 or T9 no longer matches, re-read the file and make the same
+   change to what is there, counting suites from the base (the caption's
+   count is the base's plus one).
+2. Whether a subagent spawned from an ordinary session sees the user
    `CLAUDE.md` (the charter): spawn one and ask it to quote the first line
    of its user instructions. If it does not, `/grade`'s brief (T8, step 3)
    must carry the charter's text; amend T8 before building it.
-4. Where a subagent's transcript is written (for `leaks`): after the
-   probe in 3, find the newest `.jsonl` under `~/.claude/projects/`, and
-   put its path pattern in T8's step 5 in place of "the subagent's JSONL
-   under `~/.claude/projects/`".
 
 ### T1: the scorer core, in verify and CI
 
@@ -112,15 +125,24 @@ conflict in those two files.
 **Seams:** `checkFixture`, `readFixture`, `parseFindings`, `score`,
 `growKey`, `leaks`, `table`, `readRows`, `appendRow`; the CLI
 `score`, `leaks` and `table`
-**Interfaces:** produces `GradeError`, `home()`, `today()`,
+**Interfaces:** produces `GradeError`, `home()`, `today()`, `localDir()`,
 `appendRow(row, dir?)`, `readRows(dir?)`, `checkFixture(f, where?)`,
 `readFixture(file)`, `STEPS`, `parseFindings(report) -> [{text, severity}]`,
-`score(fixture, report, verdicts?) -> {key_size, hits, findings, severe_unmatched, false_alarms, new_faults, unadjudicated, minor_unmatched}`,
+`score(fixture, report, verdicts?, run?) -> {key_size, hits, findings, severe_unmatched, false_alarms, new_faults, unadjudicated, minor_unmatched}`,
 `growKey(fixture, verdicts, run)`, `leaks(transcript, fixture, {later, examplesRoot})`,
 `table(rows, since?)`, `parseArgs(argv, flags)`, `main(argv)`; the
 `commands` object, the `USAGE` string and the `// ---- command line`
 section every later task inserts into
 **Verify:** `node --test scripts/grade.test.mjs`
+
+A run scored again (the runner scores once, then again with the
+adjudicator's verdicts, under the same `--run`) is scored on the key it
+read: entries the run itself grew are left out, and the verdicts its last
+row settled are kept, so the second row differs from the first only by
+what the adjudicator settled. `leaks` looks for a later commit and a
+held-out example's heading, never the repository's name: the fixture's
+own diff shows it (README's badge line), and a fetch or clone that reads
+past `head` names a later commit.
 
 - [ ] Write the failing tests at the named seams. Create `scripts/grade.test.mjs`:
 
@@ -158,6 +180,12 @@ const fixture = (over = {}) => ({
   ...over,
 });
 const put = (dir, name, text) => { const p = path.join(dir, name); fs.writeFileSync(p, text); return p; };
+// A git command in dir that must succeed; returns its output.
+const gitIn = (dir, ...a) => {
+  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t', '-c', 'core.autocrlf=false', '-c', 'init.defaultBranch=main', '-C', dir, ...a], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  return r.stdout.trim();
+};
 
 // ---- T1: rows, fixtures, findings, scoring, leaks, table
 
@@ -177,7 +205,7 @@ test('findings: a paragraph or list item each; labels from the paragraph, then i
   const report = [
     '# Clearing review at abc1234', '', 'Not cleared.', '',
     '## Major', '', '- `nohup cd <other>; rm CLAUDE.md` gets through.', '- Second major',
-    '  continues here.', '', 'Minor: a comment is wrong.', '',
+    '  continues here.', '', 'Minor: a comment is wrong.', '', '1. Nit: a label after a list marker.', '',
     '## Notes', '', 'Ran 22 mutants.', '',
     '## Nits (2)', '', '1. spacing', '2) wording',
   ].join('\n');
@@ -186,17 +214,18 @@ test('findings: a paragraph or list item each; labels from the paragraph, then i
     { text: '- `nohup cd <other>; rm CLAUDE.md` gets through.', severity: 'major' },
     { text: '- Second major continues here.', severity: 'major' },
     { text: 'Minor: a comment is wrong.', severity: 'minor' },
+    { text: '1. Nit: a label after a list marker.', severity: 'nit' },
     { text: '1. spacing', severity: 'nit' },
     { text: '2) wording', severity: 'nit' },
   ]);
   assert.deepEqual(G.parseFindings('## Blockers\n\nCI never ran.\r\n'), [{ text: 'CI never ran.', severity: 'blocker' }]);
 });
 
-test('score: hits by regex, case-folded; unmatched severe findings settled by verdicts; minors counted only', () => {
-  const report = '## Major\n\n- `NOHUP cd x; rm y` passes\n- a made-up problem\n- another one\n\n## Minor\n\n- style\n';
+test('score: hits by regex, case-folded, at any severity; unmatched severe findings settled by verdicts; unmatched minors counted only', () => {
+  const report = '## Major\n\n- `NOHUP cd x; rm y` passes\n- a made-up problem\n- another one\n\n## Minor\n\n- style\n- `cd a || exit` too\n';
   const r = G.score(fixture(), report, [{ text: '- a made-up problem', verdict: 'not-reproduced' }]);
   assert.deepEqual(r, {
-    key_size: 2, hits: ['k1'], findings: 4, severe_unmatched: ['- a made-up problem', '- another one'],
+    key_size: 2, hits: ['k1', 'k2'], findings: 5, severe_unmatched: ['- a made-up problem', '- another one'],
     false_alarms: 1, new_faults: [], unadjudicated: 1, minor_unmatched: 1,
   });
   const both = G.score(fixture(), '- `nohup cd a` and `cd b || exit`\n', [{ text: 'x', verdict: 'reproduced' }]);
@@ -216,22 +245,23 @@ test('growKey: a reproduced finding joins the key once, matched by its longest b
     'one two three four five six seven eight');
 });
 
-test('leaks: a later commit, the repository slug, a held-out heading; a clean transcript has none', (t) => {
+test('leaks: a later commit, a held-out heading; the repository\'s own name and a clean transcript have none', (t) => {
   const root = tmp(t);
   fs.mkdirSync(path.join(root, 'skills/build'), { recursive: true });
   put(root, 'skills/build/clearing-review-examples.md', '# x\n\n## C9. The oracle found it (real)\n');
   const f = fixture();
   const opts = { later: ['1234567aaaa', 'short'], examplesRoot: root };
-  assert.deepEqual(G.leaks('read 1234567 then github.com/o/r; C9. The oracle found it (real)', f, opts),
-    ['later commit 1234567', 'repository o/r', 'held-out example skills/build/clearing-review-examples.md#C9']);
-  assert.deepEqual(G.leaks('reviewed abc1234 against def5678', f, opts), []);
+  assert.deepEqual(G.leaks('read 1234567 then C9. The oracle found it (real)', f, opts),
+    ['later commit 1234567', 'held-out example skills/build/clearing-review-examples.md#C9']);
+  assert.deepEqual(G.leaks('reviewed abc1234 against def5678; the README badge names github.com/o/r', f, opts), []);
 });
 
-test('score CLI: appends one row; refuses a held-out ablation and a draft fixture; grows the key file', (t) => {
+test('score CLI: a row per run; a grown key goes to grading/local; a rescore keeps its verdicts, not its growth; refusals write nothing', (t) => {
   const h = tmp(t);
   const fx = put(h, 'fx.json', JSON.stringify(fixture()));
   const rep = put(h, 'r.md', '## Major\n\n- `nohup cd a; rm b`\n- `env cd <other>; rm CLAUDE.md`\n');
-  const ver = put(h, 'v.json', JSON.stringify([{ text: '- `env cd <other>; rm CLAUDE.md`', verdict: 'reproduced' }]));
+  const found = '- `env cd <other>; rm CLAUDE.md`';
+  const ver = put(h, 'v.json', JSON.stringify([{ text: found, verdict: 'reproduced' }]));
   const r = cli(h, 'score', fx, rep, '--verdicts', ver, '--tokens', '1000', '--model', 'm', '--run', 'r1');
   assert.equal(r.status, 0, r.stderr);
   const rows = G.readRows(h);
@@ -239,13 +269,23 @@ test('score CLI: appends one row; refuses a held-out ablation and a draft fixtur
   assert.equal(rows[0].kind, 'fixture');
   assert.equal(rows[0].config, 'unversioned');
   assert.deepEqual([rows[0].hits, rows[0].new_faults.length, rows[0].tokens], [['k1'], 1, 1000]);
-  assert.equal(JSON.parse(fs.readFileSync(fx, 'utf8')).key.length, 3);
+  assert.deepEqual(rows[0].settled, [{ by: 'adjudicator', text: found, verdict: 'reproduced' }]);
+  assert.equal(JSON.parse(fs.readFileSync(fx, 'utf8')).key.length, 2, 'the fixture read is never written');
+  const grown = path.join(h, 'grading', 'local', 'fx', 'fixture.json');
+  assert.equal(JSON.parse(fs.readFileSync(grown, 'utf8')).key.length, 3);
+  assert.equal(cli(h, 'score', grown, rep, '--run', 'r1').status, 0);
+  const again = G.readRows(h)[1];
+  assert.deepEqual([again.key_size, again.hits, again.new_faults, again.unadjudicated], [2, ['k1'], [found], 0],
+    'scored again on the key it read, with the verdicts its last row settled');
   const held = cli(h, 'score', fx, rep, '--without', 'skills/build/clearing-review-examples.md#C9');
   assert.equal(held.status, 2);
   assert.match(held.stderr, /refused: skills\/build\/clearing-review-examples.md#C9 is held out of fx/);
   const draft = put(h, 'd.json', JSON.stringify(fixture({ status: 'draft' })));
   assert.match(cli(h, 'score', draft, rep).stderr, /refused: fx is a draft fixture/);
-  assert.equal(G.readRows(h).length, 1, 'refusals write nothing');
+  const broken = cli(h, 'score', fx, rep, '--verdicts', put(h, 'bad.json', '[{"text": '));
+  assert.equal(broken.status, 2);
+  assert.match(broken.stderr, /bad\.json: not JSON/);
+  assert.equal(G.readRows(h).length, 2, 'refusals write nothing');
 });
 
 test('table: recall per fixture, leak-flagged runs counted and left out of the means', () => {
@@ -277,9 +317,11 @@ test('table: recall per fixture, leak-flagged runs counted and left out of the m
 // appended to grades.jsonl. Nothing here calls a model: where a finding needs judgement, the runner
 // (commands/grade.md) asks an adjudicator and hands its verdicts back with --verdicts.
 //
-// Usage: node grade.mjs <score|handoff|mint|cite|reasks|field|leaks|table|perturb> [args]  (see usage below)
+// Usage: node grade.mjs <score|leaks|probes|handoff|mint|cite|reasks|field|perturb|table> [args]  (see usage below)
 // Exit 0 = done; 1 = the check found something (a contradiction, a leak, a draft fixture); 2 = refused or unusable
-// input, nothing written. GRADE_HOME (default ~/.claude) holds grades.jsonl; GRADE_TODAY fixes the date.
+// input, nothing written. GRADE_HOME (default ~/.claude) holds grades.jsonl and grading/; GRADE_TODAY fixes the
+// date. Shipped fixtures sit in grading/fixtures/ (setup replaces them on update); minted fixtures, and a copy of
+// any fixture whose key a run grew, sit in grading/local/, which nothing ships or replaces.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -290,8 +332,13 @@ import { pathToFileURL } from 'node:url';
 export class GradeError extends Error {}
 export const home = () => process.env.GRADE_HOME ?? path.join(os.homedir(), '.claude');
 export const today = () => process.env.GRADE_TODAY ?? new Date().toISOString().slice(0, 10);
+export const localDir = () => path.join(home(), 'grading', 'local');
 const read = (file) => {
   try { return fs.readFileSync(file, 'utf8'); } catch { throw new GradeError(`cannot read ${file}`); }
+};
+const readJson = (file) => {
+  const text = read(file);
+  try { return JSON.parse(text); } catch { throw new GradeError(`${file}: not JSON`); }
 };
 
 // ---- rows
@@ -346,7 +393,7 @@ export function readFixture(file) {
 
 const SEVERITIES = ['blocker', 'major', 'minor', 'nit'];
 const labelOf = (text) => {
-  const m = /^[\s*_#>:-]*(blocker|major|minor|nit)s?\b/i.exec(text);
+  const m = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?[\s*_#>:-]*(blocker|major|minor|nit)s?\b/i.exec(text);
   return m ? m[1].toLowerCase() : null;
 };
 // A finding is a paragraph or list item of the report. A heading that names a severity labels what follows it;
@@ -385,20 +432,23 @@ export function parseFindings(report) {
 const severe = (f) => f.severity === 'blocker' || f.severity === 'major';
 // Hits, and the findings no key entry matched. Verdicts (from the runner's adjudicator or the guard probe) settle
 // unmatched severe findings: reproduced is a new fault, not reproduced a false alarm; the rest stay unadjudicated.
-export function score(fixture, report, verdicts = []) {
+// A run scored again is scored on the key it read: entries the run itself grew are left out.
+export function score(fixture, report, verdicts = [], run = null) {
+  const grownBy = new Set((fixture.history ?? []).filter((h) => run !== null && h.run === run).map((h) => h.id));
+  const key = fixture.key.filter((e) => !grownBy.has(e.id));
   const findings = parseFindings(report);
   const hit = new Set();
   const unmatched = [];
   for (const f of findings) {
-    const ids = fixture.key.filter((e) => new RegExp(e.match, 'i').test(f.text)).map((e) => e.id);
+    const ids = key.filter((e) => new RegExp(e.match, 'i').test(f.text)).map((e) => e.id);
     for (const id of ids) hit.add(id);
     if (ids.length === 0) unmatched.push(f);
   }
   const severeUnmatched = unmatched.filter(severe);
   const verdictOf = (f) => verdicts.find((v) => v.text === f.text)?.verdict;
   return {
-    key_size: fixture.key.length,
-    hits: fixture.key.map((e) => e.id).filter((id) => hit.has(id)),
+    key_size: key.length,
+    hits: key.map((e) => e.id).filter((id) => hit.has(id)),
     findings: findings.length,
     severe_unmatched: severeUnmatched.map((f) => f.text),
     false_alarms: severeUnmatched.filter((f) => verdictOf(f) === 'not-reproduced').length,
@@ -426,15 +476,12 @@ export function growKey(fixture, verdicts, run) {
 
 // ---- leaks
 
-// A run leaks when its transcript names a commit after the fixture's head, the fixture's repository by URL or
-// owner/name, or the heading of an example the fixture holds out (the brief strips it, so the run read it).
+// A run leaks when its transcript names a commit after the fixture's head, or the heading of an example the
+// fixture holds out (the brief strips it, so the run read it). The repository's own name is no leak: the
+// fixture's diff shows it, and a fetch or clone that reads past head names a later commit.
 export function leaks(transcript, fixture, { later = [], examplesRoot = null } = {}) {
   const found = [];
   for (const sha of later) if (sha.length >= 7 && transcript.includes(sha.slice(0, 7))) found.push(`later commit ${sha.slice(0, 7)}`);
-  if (/^https?:\/\//.test(fixture.repo)) {
-    const slug = fixture.repo.replace(/^https?:\/\/[^/]+\//, '').replace(/\.git$/, '');
-    if (transcript.includes(slug)) found.push(`repository ${slug}`);
-  }
   for (const h of fixture.held_out) {
     const [file, id] = h.split('#');
     if (!examplesRoot || !id) continue;
@@ -518,15 +565,24 @@ const commands = {
     if (clash.length) throw new GradeError(`refused: ${clash.join(', ')} is held out of ${fixture.id}, so an arm without it measures leakage, not help`);
     if (fixture.status === 'draft') throw new GradeError(`refused: ${fixture.id} is a draft fixture`);
     const report = read(pos[1]);
-    const verdicts = opt.verdicts ? JSON.parse(read(opt.verdicts)) : [];
-    const result = score(fixture, report, verdicts);
+    const run = opt.run ?? null;
+    // A run scored again keeps the verdicts its last row settled (the guard probe's among them); the file's win.
+    const last = run === null ? undefined : readRows().filter((r) => r.kind === 'fixture' && r.fixture === fixture.id && r.run === run).at(-1);
+    let verdicts = [...(opt.verdicts ? readJson(opt.verdicts) : []).map((v) => ({ by: 'adjudicator', ...v })), ...(last?.settled ?? [])];
+    const result = score(fixture, report, verdicts, run);
     const row = appendRow({
-      kind: 'fixture', step: fixture.step, fixture: fixture.id, head: fixture.head, run: opt.run ?? null, model: opt.model ?? null,
+      kind: 'fixture', step: fixture.step, fixture: fixture.id, head: fixture.head, run, model: opt.model ?? null,
       tokens: opt.tokens ? Number(opt.tokens) : null, held_out: fixture.held_out, without,
       leak_flags: Number(opt['leak-flags'] ?? 0), ...result,
+      settled: result.severe_unmatched.map((t) => verdicts.find((v) => v.text === t)).filter(Boolean),
     });
-    const grown = growKey(fixture, verdicts, opt.run ?? row.date);
-    if (grown.key.length > fixture.key.length) fs.writeFileSync(pos[0], JSON.stringify(grown, null, 2) + '\n');
+    // A grown key goes to grading/local/, never over the file read: setup replaces a shipped fixture on update.
+    const grown = growKey(fixture, verdicts, run ?? row.date);
+    if (grown.key.length > fixture.key.length) {
+      const dir = path.join(localDir(), fixture.id);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'fixture.json'), JSON.stringify(grown, null, 2) + '\n');
+    }
     console.log(JSON.stringify(row));
     return 0;
   },
@@ -565,53 +621,63 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process
 - [ ] In `.github/workflows/test.yml`, replace
 
 ```yaml
-# A Windows job runs the guard suite alone (node only).
+# A Windows job runs the two guard suites alone (node, and Git Bash for the oracle).
 ```
 
 with
 
 ```yaml
-# A Windows job runs the guard and grade suites (node only).
+# A Windows job runs the two guard suites and the grade suite (node, with Git Bash and git for the oracle and
+# the grader).
 ```
 
 - [ ] In `.github/workflows/test.yml`, replace
 
 ```yaml
-        run: bash scripts/perturb-hook.test.sh
+      - if: ${{ !cancelled() }}
+        run: node --test scripts/guard-oracle.test.mjs
+
 ```
 
 with
 
 ```yaml
-        run: bash scripts/perturb-hook.test.sh
+      - if: ${{ !cancelled() }}
+        run: node --test scripts/guard-oracle.test.mjs
       - if: ${{ !cancelled() }}
         run: node --test scripts/grade.test.mjs
+
 ```
 
 - [ ] In `.github/workflows/test.yml`, replace
 
 ```yaml
-    # The guard suite alone on Windows, where its drive-letter, /c/ and case-folding paths run. The bash suites
-    # stay on Linux and macOS.
+    # The two guard suites alone on Windows, where the guard's drive-letter, /c/, mount and case-folding paths
+    # run, the second against Git Bash itself. The other bash suites stay on Linux and macOS.
 ```
 
 with
 
 ```yaml
-    # The guard and grade suites on Windows, where the guard's drive-letter, /c/ and case-folding paths run. The
-    # bash suites stay on Linux and macOS.
+    # The two guard suites and the grade suite on Windows, where the guard's drive-letter, /c/, mount and
+    # case-folding paths run, the oracle and the grader against Git Bash itself. The other bash suites stay on
+    # Linux and macOS.
 ```
 
 - [ ] In `.github/workflows/test.yml`, replace
 
 ```yaml
       - run: node --test scripts/perturb-guard.test.mjs
+      - if: ${{ !cancelled() }}
+        run: node --test scripts/guard-oracle.test.mjs
 ```
 
 with
 
 ```yaml
       - run: node --test scripts/perturb-guard.test.mjs
+      - if: ${{ !cancelled() }}
+        run: node --test scripts/guard-oracle.test.mjs
       - if: ${{ !cancelled() }}
         run: node --test scripts/grade.test.mjs
 ```
@@ -619,34 +685,35 @@ with
 - [ ] In `CLAUDE.md`, replace
 
 ```md
-  `node --test scripts/perturb-guard.test.mjs` and
-  `bash scripts/perturb-hook.test.sh`, all green. CI runs all six on
-  Linux and macOS, and the guard suite (`node --test`) alone on Windows.
+  `bash scripts/perturb-hook.test.sh` and
+  `node --test scripts/guard-oracle.test.mjs` (the guard against real
+  bash), all green. CI runs all seven on Linux and macOS, and the two
+  guard suites (`node --test`) alone on Windows.
 ```
 
 with
 
 ```md
-  `node --test scripts/perturb-guard.test.mjs`,
-  `bash scripts/perturb-hook.test.sh` and
-  `node --test scripts/grade.test.mjs`, all green. CI runs all seven on
-  Linux and macOS, and the guard and grade suites (`node --test`) on
-  Windows.
+  `bash scripts/perturb-hook.test.sh`,
+  `node --test scripts/guard-oracle.test.mjs` (the guard against real
+  bash) and `node --test scripts/grade.test.mjs`, all green. CI runs all
+  eight on Linux and macOS, and the two guard suites and the grade suite
+  (`node --test`) on Windows.
 ```
 
 - [ ] In `README.md`, replace
 
 ```md
-(the scripts' six test suites on Ubuntu and macOS, and the guard suite
-also on Windows; the skills themselves are prose and have no tests)
+(the scripts' seven test suites on Ubuntu and macOS, and the two guard
+suites also on Windows; the skills themselves are prose and have no tests)
 ```
 
 with
 
 ```md
-(the scripts' seven test suites on Ubuntu and macOS, and the guard and
-grade suites also on Windows; the skills themselves are prose and have no
-tests)
+(the scripts' eight test suites on Ubuntu and macOS, and the two guard
+suites and the grade suite also on Windows; the skills themselves are prose
+and have no tests)
 ```
 
 - [ ] Run `node --test scripts/grade.test.mjs`; expected: 7 pass, 0 fail, 0 skipped, of 7.
@@ -655,28 +722,43 @@ tests)
 
   - **Notes not skipped**: in `scripts/grade.mjs` replace `notes = /^notes\b/i.test(h[1]);` with `notes = false;`; fails: "findings: a paragraph or list item each; labels from the paragraph, then its heading; unlabeled is major; Notes is skipped".
   - **an unlabeled finding is minor**: in `scripts/grade.mjs` replace `severity: labelOf(text) ?? heading ?? 'major'` with `severity: labelOf(text) ?? heading ?? 'minor'`; fails: "findings: a paragraph or list item each; labels from the paragraph, then its heading; unlabeled is major; Notes is skipped".
-  - **matching is case-sensitive**: in `scripts/grade.mjs` replace `fixture.key.filter((e) => new RegExp(e.match, 'i').test(f.text))` with `fixture.key.filter((e) => new RegExp(e.match).test(f.text))`; fails: "score: hits by regex, case-folded; unmatched severe findings settled by verdicts; minors counted only".
-  - **growKey adds an entry twice**: in `scripts/grade.mjs` replace `if (out.key.some((e) => new RegExp(e.match, 'i').test(v.text))) continue;` with `(nothing)`; fails: "growKey: a reproduced finding joins the key once, matched by its longest backticked span, with history".
-  - **no duplicate-id check**: in `scripts/grade.mjs` replace `if (ids.has(e.id)) throw new GradeError(\`${where}: key entry ${e.id} appears twice\`);` with `(nothing)`; fails: "a fixture missing a field, with an unknown step, an empty key, a duplicate id or a bad regex is refused".
-  - **no held-out refusal**: in `scripts/grade.mjs` replace `if (clash.length) throw` with `if (false) throw`; fails: "score CLI: appends one row; refuses a held-out ablation and a draft fixture; grows the key file".
-  - **a draft fixture is scored**: in `scripts/grade.mjs` replace `if (fixture.status === 'draft') throw` with `if (false) throw`; fails: "score CLI: appends one row; refuses a held-out ablation and a draft fixture; grows the key file".
-  - **a held-out leak goes unseen**: in `scripts/grade.mjs` replace `if (head && transcript.includes(head.slice(3))) found.push` with `if (false) found.push`; fails: "leaks: a later commit, the repository slug, a held-out heading; a clean transcript has none".
+  - **a label after a list marker is not read**: in `scripts/grade.mjs` replace `(?:(?:[-*+]|\d+[.)])\s+)?` with (nothing); fails: "findings: a paragraph or list item each; labels from the paragraph, then its heading; unlabeled is major; Notes is skipped".
+  - **matching is case-sensitive**: in `scripts/grade.mjs` replace `key.filter((e) => new RegExp(e.match, 'i').test(f.text))` with `key.filter((e) => new RegExp(e.match).test(f.text))`; fails: "score: hits by regex, case-folded, at any severity; unmatched severe findings settled by verdicts; unmatched minors counted only".
+  - **a matched minor counts as unmatched**: in `scripts/grade.mjs` replace `minor_unmatched: unmatched.filter((f) => !severe(f)).length` with `minor_unmatched: findings.filter((f) => !severe(f)).length`; fails: "score: hits by regex, case-folded, at any severity; unmatched severe findings settled by verdicts; unmatched minors counted only".
+  - **growKey adds an entry twice**: in `scripts/grade.mjs` replace `if (out.key.some((e) => new RegExp(e.match, 'i').test(v.text))) continue;` with (nothing); fails: "growKey: a reproduced finding joins the key once, matched by its longest backticked span, with history".
+  - **no duplicate-id check**: in `scripts/grade.mjs` replace `` if (ids.has(e.id)) throw new GradeError(`${where}: key entry ${e.id} appears twice`); `` with (nothing); fails: "a fixture missing a field, with an unknown step, an empty key, a duplicate id or a bad regex is refused".
+  - **no held-out refusal**: in `scripts/grade.mjs` replace `if (clash.length) throw` with `if (false) throw`; fails: "score CLI: a row per run; a grown key goes to grading/local; a rescore keeps its verdicts, not its growth; refusals write nothing".
+  - **a draft fixture is scored**: in `scripts/grade.mjs` replace `if (fixture.status === 'draft') throw` with `if (false) throw`; fails: "score CLI: a row per run; a grown key goes to grading/local; a rescore keeps its verdicts, not its growth; refusals write nothing".
+  - **malformed verdicts crash**: in `scripts/grade.mjs` replace `readJson(opt.verdicts)` with `JSON.parse(read(opt.verdicts))`; fails: "score CLI: a row per run; a grown key goes to grading/local; a rescore keeps its verdicts, not its growth; refusals write nothing".
+  - **a rescore hits its own grown entry**: in `scripts/grade.mjs` replace `const key = fixture.key.filter((e) => !grownBy.has(e.id));` with `const key = fixture.key;`; fails: "score CLI: a row per run; a grown key goes to grading/local; a rescore keeps its verdicts, not its growth; refusals write nothing".
+  - **a rescore forgets what its run settled**: in `scripts/grade.mjs` replace `, ...(last?.settled ?? [])]` with `]`; fails: "score CLI: a row per run; a grown key goes to grading/local; a rescore keeps its verdicts, not its growth; refusals write nothing".
+  - **a grown key overwrites the fixture read**: in `scripts/grade.mjs` replace `fs.writeFileSync(path.join(dir, 'fixture.json'), JSON.stringify(grown` with `fs.writeFileSync(pos[0], JSON.stringify(grown`; fails: "score CLI: a row per run; a grown key goes to grading/local; a rescore keeps its verdicts, not its growth; refusals write nothing".
+  - **a held-out leak goes unseen**: in `scripts/grade.mjs` replace `if (head && transcript.includes(head.slice(3))) found.push` with `if (false) found.push`; fails: "leaks: a later commit, a held-out heading; the repository's own name and a clean transcript have none".
   - **leak-flagged runs in the means**: in `scripts/grade.mjs` replace `const clean = all.filter((r) => !(r.leak_flags > 0));` with `const clean = all;`; fails: "table: recall per fixture, leak-flagged runs counted and left out of the means".
-  - **a run scored again counts twice**: in `scripts/grade.mjs` replace `!(r.kind === 'fixture' && r.run && last.get(\`${r.fixture}\n${r.run}\`) !== i)` with `true`; fails: "table: recall per fixture, leak-flagged runs counted and left out of the means".
+  - **a run scored again counts twice**: in `scripts/grade.mjs` replace `` !(r.kind === 'fixture' && r.run && last.get(`${r.fixture}\n${r.run}`) !== i) `` with `true`; fails: "table: recall per fixture, leak-flagged runs counted and left out of the means".
 
 - [ ] Commit: "Grade: score a review against a fixture's key"; the body
-  says what a fixture, a hit and a false alarm are, and that verify and
-  CI now run the suite.
+  says what a fixture, a hit and a false alarm are, where a grown key is
+  written, and that verify and CI now run the suite.
 
 ### T2: the guard probe
 
 **Depends on:** T1
 **Files:** modify `scripts/grade.mjs`; test `scripts/grade.test.mjs`
-**Seams:** `guardCases(text, sandbox)`, `probeGuard(texts, guardPath, oraclePath)`; the CLI `score --checkout --oracle`
-**Interfaces:** consumes the oracle's `run` and `makeSandbox` (pull
-request 16); produces `guardCases`, `probeGuard -> [{text, verdict}]`, and
-the private `oracleRun(oraclePath, guard, build)` that T3 uses
+**Seams:** `guardCases(text, sandbox)`, `claimsHarm(text)`, `probeGuard(texts, guard, oraclePath)`; the CLI `score --checkout --oracle`
+**Interfaces:** consumes the oracle's `run` and `makeSandbox`; produces
+`guardCases`, `claimsHarm`, `probeGuard -> [{text, verdict}]` (its
+`guard` a file, or a function of the sandbox that writes one), and the
+private `oracleRun(oraclePath, guard, build)` and
+`guardAt(repoDir, head)` (the guard as committed at `head`, by
+`git show`) that T3 uses
 **Verify:** `node --test scripts/grade.test.mjs`
+
+The probe settles one claim only: that the guard lets harm through. A
+finding goes to it when it says so (lets-through words such as "gets
+through", "passes", "removes", and no refusal, over-refusal or CI wording);
+a finding about over-refusal, CI or docs that quotes a command goes to
+the adjudicator, so the probe never calls it a false alarm.
 
 - [ ] Write the failing tests at the named seams. Append to `scripts/grade.test.mjs`:
 
@@ -698,6 +780,15 @@ test('guardCases: placeholders map to the oracle folders, both starts per family
   assert.equal(G.guardCases('`cd <somewhere>; rm CLAUDE.md`', s), null);
 });
 
+test('claimsHarm: only a finding that says the guard lets harm through; refusals, CI and docs findings are not', () => {
+  assert.ok(G.claimsHarm('Major: `nohup cd <other>; rm CLAUDE.md` from the config folder removes it.'));
+  assert.ok(G.claimsHarm('Blocker: `cd <missing> && true; rm CLAUDE.md` gets through the guard.'));
+  assert.ok(!G.claimsHarm('Major: the hook test runs `node scripts/perturb-guard.test.mjs 2>&1 | tail -5`, so a failing suite exits 0 and CI passes.'));
+  assert.ok(!G.claimsHarm('Major: `cd <other>; rm notes.txt` from the config folder is refused, though bash removes nothing protected (an over-refusal).'));
+  assert.ok(!G.claimsHarm('Major: the README example `git push origin HEAD` is documented as refused, but the skill never says why.'));
+  assert.ok(!G.claimsHarm('Major: the README quotes `git push origin HEAD` with no word on what it does.'));
+});
+
 const ORACLE = fileURLToPath(new URL('./guard-oracle.mjs', import.meta.url));
 
 const GUARD = fileURLToPath(new URL('./perturb-guard.mjs', import.meta.url));
@@ -709,18 +800,43 @@ test('probeGuard: a guard that allows everything reproduces a harmful finding; t
   assert.deepEqual(await G.probeGuard(texts, open, ORACLE), [{ text: texts[0], verdict: 'reproduced' }]);
   assert.deepEqual(await G.probeGuard(texts, GUARD, ORACLE), [{ text: texts[0], verdict: 'not-reproduced' }]);
 });
+
+test('score CLI with --checkout: the guard as committed at head settles a harm claim; any other finding is left', { skip: !fs.existsSync(ORACLE) && 'guard-oracle.mjs is not beside grade.mjs' }, (t) => {
+  const h = tmp(t);
+  const dir = tmp(t);
+  gitIn(dir, 'init', '-q');
+  fs.mkdirSync(path.join(dir, 'scripts'));
+  fs.writeFileSync(path.join(dir, 'scripts/perturb-guard.mjs'), 'process.exit(0);\n');
+  gitIn(dir, 'add', '-A'); gitIn(dir, 'commit', '-qm', 'open');
+  // The working tree's guard refuses everything; the committed one at head lets everything through.
+  fs.writeFileSync(path.join(dir, 'scripts/perturb-guard.mjs'), "process.stderr.write('perturb-guard: refused all'); process.exit(2);\n");
+  const f = fixture({ head: gitIn(dir, 'rev-parse', 'HEAD'), key: [{ ...fixture().key[0], probe: { kind: 'guard', start: 'C', command: 'nohup cd {O}; rm CLAUDE.md' } }] });
+  const harm = '- `rm <config>/CLAUDE.md` gets through the guard.';
+  const refusal = '- `cd <other>; rm notes.txt` from the config folder is refused (an over-refusal).';
+  const r = cli(h, 'score', put(h, 'fx.json', JSON.stringify(f)), put(h, 'r.md', `## Major\n\n${harm}\n${refusal}\n`), '--checkout', dir, '--oracle', ORACLE, '--run', 'g1');
+  assert.equal(r.status, 0, r.stderr);
+  const [row] = G.readRows(h);
+  assert.deepEqual([row.new_faults, row.false_alarms, row.unadjudicated], [[harm], 0, 1]);
+  assert.deepEqual(row.settled, [{ text: harm, verdict: 'reproduced', by: 'guard' }]);
+});
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 1 failing of 9 (1 skipped: the oracle is not beside the script), these:
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 4 failing of 11, these:
 
 ```
 ✖ guardCases: placeholders map to the oracle folders, both starts per family; an unplaceable span refuses
+✖ claimsHarm: only a finding that says the guard lets harm through; refusals, CI and docs findings are not
+✖ probeGuard: a guard that allows everything reproduces a harmful finding; the guard as it stands does not
+✖ score CLI with --checkout: the guard as committed at head settles a harm claim; any other finding is left
 ```
 
   with errors such as
 
 ```
 TypeError: G.guardCases is not a function
+TypeError: G.claimsHarm is not a function
+TypeError: G.probeGuard is not a function
+AssertionError [ERR_ASSERTION]: grade: unknown option --checkout
 ```
 
 - [ ] In `scripts/grade.mjs`, insert immediately before the line `// ---- command line`:
@@ -769,11 +885,22 @@ async function oracleRun(oraclePath, guard, build) {
     fs.rmSync(s.T, { recursive: true, force: true });
   }
 }
-// Each unmatched severe finding of a guard fixture: run its commands and ask the guard at the fixture's head.
-// Harm let through is reproduced; harm refused, or no harm, is not reproduced; a finding with no command, or one
-// the rules cannot place, is left for the adjudicator.
-export async function probeGuard(texts, guardPath, oraclePath) {
-  const ran = await oracleRun(oraclePath, guardPath, (s) => texts.flatMap((text, i) => (guardCases(text, s) ?? []).map((c) => ({ ...c, i }))));
+// The guard as committed at head (git show, never a checkout's working tree), written into the oracle's sandbox.
+const guardAt = (repoDir, head) => (s) => {
+  const file = path.join(s.T, 'guard-at-head.mjs');
+  fs.writeFileSync(file, execFileSync('git', ['-C', repoDir, 'show', `${head}:scripts/perturb-guard.mjs`]));
+  return file;
+};
+// Whether a finding says the guard lets harm through, the one claim the probe can settle. A finding that the guard
+// refuses too much, or about CI, tests or docs that only quote a command, goes to the adjudicator.
+const LETS_THROUGH = /\b(through|past|bypass\w*|allow(s|ed)?|pass(es|ed)?|not (refused|blocked|caught)|unrefused|removes?|deletes?|overwrites?|clobbers?|pushes)\b/i;
+const NOT_A_HARM_CLAIM = /over-?refus|\b(is|are|was|were|be|been|gets?|got|wrongly|documented as|still) (refused|blocked)\b|\b(CI|suites?|tests?|jobs?|builds?) (pass(es|ed)?|stays? green|exits? 0)\b/i;
+export const claimsHarm = (text) => LETS_THROUGH.test(text) && !NOT_A_HARM_CLAIM.test(text);
+// Each unmatched severe finding of a guard fixture that claims harm: run its commands and ask the guard (a file,
+// or a function of the sandbox that writes one). Harm let through is reproduced; harm refused, or no harm, is not
+// reproduced; any other finding, one with no command, or one the rules cannot place, is left for the adjudicator.
+export async function probeGuard(texts, guard, oraclePath) {
+  const ran = await oracleRun(oraclePath, guard, (s) => texts.flatMap((text, i) => (claimsHarm(text) ? guardCases(text, s) ?? [] : []).map((c) => ({ ...c, i }))));
   return texts.map((text, i) => ({ text, mine: ran.filter((c) => c.i === i) })).filter((p) => p.mine.length)
     .map((p) => ({ text: p.text, verdict: p.mine.some((c) => c.let) ? 'reproduced' : 'not-reproduced' }));
 }
@@ -792,22 +919,14 @@ with
 { verdicts: 1, checkout: 1, oracle: 1, model: 1, tokens: 1, without: 'list', 'leak-flags': 1, run: 1 }
 ```
 
-- [ ] In `scripts/grade.mjs`, replace
+- [ ] In `scripts/grade.mjs`, insert immediately before the line `const result = score(fixture, report, verdicts, run);`:
 
 ```js
-    const verdicts = opt.verdicts ? JSON.parse(read(opt.verdicts)) : [];
-```
-
-with
-
-```js
-    let verdicts = opt.verdicts ? JSON.parse(read(opt.verdicts)) : [];
     const probed = fixture.key.some((e) => e.probe?.kind === 'guard');
     if (probed && opt.checkout && opt.oracle) {
-      const first = score(fixture, report, verdicts);
+      const first = score(fixture, report, verdicts, run);
       const open = first.severe_unmatched.filter((t) => !verdicts.some((v) => v.text === t));
-      const guard = path.join(opt.checkout, 'scripts', 'perturb-guard.mjs');
-      verdicts = [...verdicts, ...(await probeGuard(open, guard, opt.oracle))];
+      verdicts = [...verdicts, ...(await probeGuard(open, guardAt(opt.checkout, fixture.head), opt.oracle)).map((v) => ({ ...v, by: 'guard' }))];
     }
 ```
 
@@ -823,16 +942,21 @@ with
   grade.mjs score <fixture.json> <report> [--verdicts <file>] [--checkout <dir>] [--oracle <file>]
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 8 pass, 0 fail, 1 skipped, of 9 (the skips name the missing oracle).
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 11 pass, 0 fail, 0 skipped, of 11.
 
 - [ ] Mutant runs, one at a time on the full suite with `scripts/guard-oracle.mjs` present, restored after each, under a timeout of 300 s. Each must fail the tests named:
 
-  - **an unplaceable span is kept**: in `scripts/grade.mjs` replace `if (/<[^<>]+>/.test(command)) return null;` with `(nothing)`; fails: "guardCases: placeholders map to the oracle folders, both starts per family; an unplaceable span refuses", "probeGuard: a guard that allows everything reproduces a harmful finding; the guard as it stands does not".
+  - **an unplaceable span is kept**: in `scripts/grade.mjs` replace `if (/<[^<>]+>/.test(command)) return null;` with (nothing); fails: "guardCases: placeholders map to the oracle folders, both starts per family; an unplaceable span refuses".
+  - **a refusal reads as a harm claim**: in `scripts/grade.mjs` replace `&& !NOT_A_HARM_CLAIM.test(text)` with (nothing); fails: "claimsHarm: only a finding that says the guard lets harm through; refusals, CI and docs findings are not".
+  - **a finding with no harm words is probed**: in `scripts/grade.mjs` replace `LETS_THROUGH.test(text) &&` with (nothing); fails: "claimsHarm: only a finding that says the guard lets harm through; refusals, CI and docs findings are not".
+  - **the probe ignores what a finding claims**: in `scripts/grade.mjs` replace `(claimsHarm(text) ? guardCases(text, s) ?? [] : [])` with `(guardCases(text, s) ?? [])`; fails: "score CLI with --checkout: the guard as committed at head settles a harm claim; any other finding is left".
   - **the verdict ignores the guard**: in `scripts/grade.mjs` replace `verdict: p.mine.some((c) => c.let) ? 'reproduced'` with `verdict: p.mine.length ? 'reproduced'`; fails: "probeGuard: a guard that allows everything reproduces a harmful finding; the guard as it stands does not".
+  - **the guard is read from the working tree**: in `scripts/grade.mjs` replace `guardAt(opt.checkout, fixture.head)` with `path.join(opt.checkout, 'scripts', 'perturb-guard.mjs')`; fails: "score CLI with --checkout: the guard as committed at head settles a harm claim; any other finding is left".
 
 - [ ] Commit: "Grade: settle a guard finding in real bash"; the body
-  names the placeholders a finding may use and why an unplaceable one is
-  left for the adjudicator.
+  names the placeholders a finding may use, why an unplaceable one is
+  left for the adjudicator, that only a finding claiming harm let through
+  is probed, and that the guard is read as committed at `head`.
 
 ### T3: the PR 13 reference fixtures
 
@@ -842,7 +966,7 @@ with
 `grading/fixtures/pr13-round8/fixture.json`; modify `scripts/grade.mjs`;
 test `scripts/grade.test.mjs`
 **Seams:** the shipped fixture files; `checkGuardProbes(fixture, repoDir, oraclePath)`; the CLI `probes`
-**Interfaces:** consumes `readFixture`, `oracleRun`; produces
+**Interfaces:** consumes `readFixture`, `oracleRun`, `guardAt`; produces
 `checkGuardProbes -> [problem]`
 **Verify:** `node --test scripts/grade.test.mjs`, then the by-hand check
 at the end of this task
@@ -855,15 +979,20 @@ report (`docs/BUILD-REPORT-2026-11-23.md`, "Clearing review") rates
 blocker or major whose class the oracle shows the guard at that head
 letting through, plus that round's own blocker and major findings that
 are in the tree. Each entry's `source` is the report's words, and its
-regex matches them and no other entry's (the test pins both). The probes
-were run on 2026-11-26 through the oracle at pull request 16's head
-4473b5d against each head's guard: of the eighteen commands the report
-quotes, seventeen do harm the guard at 1abb851 lets through (all but
-`builtin cd -@ sub; rm CLAUDE.md`, which round 1's own fix brought in),
-six at f9178c3 (the wrapped, else, backgrounded, piped and negated-push
-forms), and none at 65a01ab, where only the drive-less Write and Edit
-path to the config gets through (on Windows). Round 4's blocker, a
-conflict with main, is not in the tree and is left out.
+regex matches them, no other entry's, and none of four decoy findings in
+the words a looser key once matched (a test helper's "subshell", a
+README's "missing folder", an installer's "option", a docs "whitelist");
+the test pins all three. The probes were run on 2026-11-26 through the
+oracle at pull request 16's head 4473b5d against each head's guard: of
+the eighteen commands the report quotes, seventeen do harm the guard at
+1abb851 lets through (all but `builtin cd -@ sub; rm CLAUDE.md`, which
+round 1's own fix brought in), six at f9178c3 (the wrapped, else,
+backgrounded, piped and negated-push forms), and none at 65a01ab, where
+only the drive-less Write and Edit path to the config gets through (on
+Windows). That last entry's probe (`kind: guard-write`) is not
+machine-checked: `probes` reads only `guard` probes, and the fixture's
+probe says so in a `note`. Round 4's blocker, a conflict with main, is
+not in the tree and is left out.
 
 - [ ] Write the failing tests at the named seams. Append to `scripts/grade.test.mjs`:
 
@@ -872,9 +1001,17 @@ conflict with main, is not in the tree and is left out.
 
 const FIXTURES = fileURLToPath(new URL('../grading/fixtures/', import.meta.url));
 
-test('shipped fixtures: each is valid; each key regex matches its own source and no other entry\'s', () => {
+test('shipped fixtures: each is valid; each key regex matches its own source, no other entry\'s, and no decoy', () => {
   const ids = fs.readdirSync(FIXTURES).sort();
   assert.deepEqual(ids, ['pr13-round1', 'pr13-round4', 'pr13-round8']);
+  // Findings that name no keyed fault, in the words a key once matched (a test helper's subshell, a README's
+  // missing folder, an installer's option, a docs whitelist).
+  const decoys = [
+    'Major: the test helper spawns a subshell for every case, which is slow on Windows.',
+    'Major: the README says a missing folder is created, but setup never creates it.',
+    'Major: an option to the installer is ignored, and the cd step in setup is documented wrong.',
+    'Major: the whitelist in the docs is out of date.',
+  ];
   for (const id of ids) {
     const f = G.readFixture(path.join(FIXTURES, id, 'fixture.json'));
     assert.equal(f.id, id);
@@ -882,37 +1019,39 @@ test('shipped fixtures: each is valid; each key regex matches its own source and
       assert.ok(new RegExp(e.match, 'i').test(e.source), `${id} ${e.id} misses its own source`);
       const cross = f.key.filter((o) => o !== e && new RegExp(e.match, 'i').test(o.source)).map((o) => o.id);
       assert.deepEqual(cross, [], `${id} ${e.id} also matches ${cross.join(', ')}`);
+      for (const d of decoys) assert.ok(!new RegExp(e.match, 'i').test(d), `${id} ${e.id} matches the decoy "${d}"`);
     }
   }
 });
 
 test('checkGuardProbes: a probe the head guard lets through passes; one it refuses is listed', { skip: !fs.existsSync(ORACLE) && 'guard-oracle.mjs is not beside grade.mjs' }, async (t) => {
   const dir = tmp(t);
-  const g = (...a) => { const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t', '-C', dir, ...a], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
-  g('init', '-q');
+  gitIn(dir, 'init', '-q');
   fs.mkdirSync(path.join(dir, 'scripts'));
   fs.writeFileSync(path.join(dir, 'scripts/perturb-guard.mjs'), 'process.exit(0);\n');
-  g('add', '-A'); g('commit', '-qm', 'open');
-  const open = g('rev-parse', 'HEAD');
+  gitIn(dir, 'add', '-A'); gitIn(dir, 'commit', '-qm', 'open');
+  const open = gitIn(dir, 'rev-parse', 'HEAD');
   fs.writeFileSync(path.join(dir, 'scripts/perturb-guard.mjs'), "process.stderr.write('perturb-guard: refused all'); process.exit(2);\n");
-  g('commit', '-qam', 'shut');
-  const shut = g('rev-parse', 'HEAD');
+  gitIn(dir, 'commit', '-qam', 'shut');
+  const shut = gitIn(dir, 'rev-parse', 'HEAD');
   const f = fixture({ key: [{ ...fixture().key[0], probe: { kind: 'guard', start: 'C', command: 'nohup cd {O}; rm CLAUDE.md' } }] });
   assert.deepEqual(await G.checkGuardProbes({ ...f, head: open }, dir, ORACLE), []);
   assert.deepEqual(await G.checkGuardProbes({ ...f, head: shut }, dir, ORACLE), [`k1: its probe does no harm, or the guard at ${shut} refuses it`]);
 });
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 1 failing of 11 (2 skipped: the oracle is not beside the script), these:
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 2 failing of 13, these:
 
 ```
-✖ shipped fixtures: each is valid; each key regex matches its own source and no other entry's
+✖ shipped fixtures: each is valid; each key regex matches its own source, no other entry's, and no decoy
+✖ checkGuardProbes: a probe the head guard lets through passes; one it refuses is listed
 ```
 
   with errors such as
 
 ```
 Error: ENOENT: no such file or directory, scandir '<tree>\grading\fixtures\'
+TypeError: G.checkGuardProbes is not a function
 ```
 
 - [ ] Create `grading/fixtures/pr13-round1/fixture.json`:
@@ -931,7 +1070,7 @@ Error: ENOENT: no such file or directory, scandir '<tree>\grading\fixtures\'
       "id": "cd-option",
       "class": "a cd with an option moves the guard to the wrong folder",
       "source": "a `cd` with an option moved the guard to the wrong folder",
-      "match": "\\bcd\\s+(-[PL]|--)\\s|\\bcd\\b[^.]{0,40}\\boption|\\boption[^.]{0,40}\\bcd\\b",
+      "match": "\\bcd\\s+(-[PL]|--)\\s|\\bcd\\b\\W{0,3}(with|given|takes) an option|\\boptions? (to|of|for) \\W?cd\\b",
       "locator": { "file": "scripts/perturb-guard.mjs", "lines": [0, 0] },
       "probe": { "kind": "guard", "start": "O", "command": "cd -P {C}; rm CLAUDE.md" }
     },
@@ -939,7 +1078,7 @@ Error: ENOENT: no such file or directory, scandir '<tree>\grading\fixtures\'
       "id": "cd-refused",
       "class": "the guard follows a cd that bash refuses",
       "source": "the guard followed a `cd` that bash refuses (`-@`, a missing folder, a file, two operands)",
-      "match": "\\bcd\\s+-@|bash refuses|missing (folder|directory)|not a (folder|directory)|two operands|too many arguments|\\bcd\\b[^.]{0,40}\\b(fails|failed)\\b",
+      "match": "\\bcd\\s+-@|\\bcd\\b[^.]{0,60}(bash refuses|missing (folder|directory)|not a (folder|directory)|two operands|too many arguments|\\b(fails|failed)\\b)",
       "locator": { "file": "scripts/perturb-guard.mjs", "lines": [0, 0] },
       "probe": { "kind": "guard", "start": "C", "command": "cd {M}; rm CLAUDE.md" }
     },
@@ -963,7 +1102,7 @@ Error: ENOENT: no such file or directory, scandir '<tree>\grading\fixtures\'
       "id": "subshell-cd",
       "class": "a cd inside parentheses or a substitution, then a removal in the same subshell",
       "source": "a `cd` inside parentheses or a substitution, then a removal in the same subshell (`(cd <config> && rm CLAUDE.md)`, `echo \"$(cd <config>; rm CLAUDE.md)\"`)",
-      "match": "\\(\\s*cd\\b|\\$\\(\\s*cd\\b|subshell|command substitution|inside parentheses",
+      "match": "\\(\\s*cd\\b|\\$\\(\\s*cd\\b|\\bcd\\b[^.]{0,60}(subshell|substitution|parentheses)",
       "locator": { "file": "scripts/perturb-guard.mjs", "lines": [0, 0] },
       "probe": { "kind": "guard", "start": "O", "command": "(cd {C} && rm CLAUDE.md)" }
     },
@@ -1011,7 +1150,7 @@ Error: ENOENT: no such file or directory, scandir '<tree>\grading\fixtures\'
       "id": "report-ignore-line",
       "class": "the build report's for-the-owner item is false",
       "source": "a false \"for the owner\" item: this report said `~/.claude` has no ignore line for the scan list, but its whitelist `.gitignore` ignores it",
-      "match": "ignore line|whitelist|\\.gitignore[^.]{0,60}scan|scan[^.]{0,60}\\.gitignore",
+      "match": "ignore line|whitelist \\W?\\.gitignore|\\.gitignore[^.]{0,60}scan|scan[^.]{0,60}\\.gitignore",
       "locator": { "file": "docs/BUILD-REPORT-2026-11-23.md", "lines": [0, 0] }
     },
     {
@@ -1145,7 +1284,8 @@ Error: ENOENT: no such file or directory, scandir '<tree>\grading\fixtures\'
         "kind": "guard-write",
         "tool": "Write",
         "path": "/<home without its drive>/.claude/CLAUDE.md",
-        "platform": "win32"
+        "platform": "win32",
+        "note": "not machine-checked: grade.mjs probes reads only guard probes; the oracle replay of 2026-11-26 on Windows showed this path let through"
       }
     }
   ]
@@ -1167,12 +1307,7 @@ this:
 export async function checkGuardProbes(fixture, repoDir, oraclePath) {
   const probes = fixture.key.filter((e) => e.probe?.kind === 'guard');
   if (!probes.length) return [];
-  const guardAt = (s) => {
-    const file = path.join(s.T, 'guard-at-head.mjs');
-    fs.writeFileSync(file, execFileSync('git', ['-C', repoDir, 'show', `${fixture.head}:scripts/perturb-guard.mjs`]));
-    return file;
-  };
-  const ran = await oracleRun(oraclePath, guardAt, (s) => probes.map((e) => ({
+  const ran = await oracleRun(oraclePath, guardAt(repoDir, fixture.head), (s) => probes.map((e) => ({
     id: e.id, family: /\bgit push\b/.test(e.probe.command) ? 'push' : 'rm', start: s[e.probe.start],
     command: e.probe.command.replace(/\{(C|O|M|F|R1|R2)\}/g, (m, k) => `"${s[k]}"`),
   })));
@@ -1199,23 +1334,27 @@ export async function checkGuardProbes(fixture, repoDir, oraclePath) {
   grade.mjs probes <fixture.json> --clone <repo dir> --oracle <file>
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 9 pass, 0 fail, 2 skipped, of 11 (the skips name the missing oracle).
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 13 pass, 0 fail, 0 skipped, of 13.
 
 - [ ] Mutant runs, one at a time on the full suite with `scripts/guard-oracle.mjs` present, restored after each, under a timeout of 300 s. Each must fail the tests named:
 
+  - **a key regex misses its own source**: in `grading/fixtures/pr13-round4/fixture.json` replace `"match": "\\b(nohup|env|nice|timeout)\\b[^.;]{0,20}\\bcd\\b"` with `"match": "\\bnohup and nothing else\\b"`; fails: "shipped fixtures: each is valid; each key regex matches its own source, no other entry's, and no decoy".
+  - **a key regex matches another entry's source**: in `grading/fixtures/pr13-round1/fixture.json` replace `"match": "\\|\\|\\s*exit|` with `"match": "\\bcd\\b|\\|\\|\\s*exit|`; fails: "shipped fixtures: each is valid; each key regex matches its own source, no other entry's, and no decoy".
+  - **a key regex matches a decoy**: in `grading/fixtures/pr13-round1/fixture.json` replace `(subshell|substitution|parentheses)"` with `(subshell|substitution|parentheses)|subshell"`; fails: "shipped fixtures: each is valid; each key regex matches its own source, no other entry's, and no decoy".
   - **head probes always pass**: in `scripts/grade.mjs` replace `return ran.filter((c) => !c.let).map` with `return ran.filter(() => false).map`; fails: "checkGuardProbes: a probe the head guard lets through passes; one it refuses is listed".
 
-- [ ] By hand, in a full clone with `scripts/guard-oracle.mjs` present
-  (after pull request 16), from a scratch folder that holds a file of its
-  own you can check survives: for each fixture,
+- [ ] By hand, in a full clone, from a scratch folder that holds a file
+  of its own you can check survives: for each fixture,
   `node <repo>/scripts/grade.mjs probes <repo>/grading/fixtures/<id>/fixture.json --clone <repo> --oracle <repo>/scripts/guard-oracle.mjs`;
-  expected for all three `probes failing: 0` (measured: exit 0 each). To
-  see it fail, copy round 1's fixture with `"head": "8743947"` (PR 13's
-  last head) and run it the same way; expected 10 lines
+  expected for all three `probes failing: 0` (measured: exit 0 each;
+  round 8's is 0 because it has no `guard` probe to run). To see it fail,
+  copy round 1's fixture with `"head": "8743947"` (PR 13's last head) and
+  run it the same way; expected 10 lines
   `probe: <id>: its probe does no harm, or the guard at 8743947 refuses it`
   and `probes failing: 10` (measured).
 - [ ] Commit: "Grade: ship PR 13's clearing rounds as fixtures"; the body
-  gives the three heads, how each key was proved, and the recall the real
+  gives the three heads, how each key was proved, that round 8's
+  Windows-only probe is checked by no code, and the recall the real
   rounds' summaries score (round 1 hits 3 of 12, round 4 2 of 4, round 8
   1 of 1; measured with `score` on each round's paragraph of the build
   report, a summary rather than the reviewer's own report).
@@ -1231,54 +1370,82 @@ test `scripts/grade.test.mjs`
 **Verify:** `node --test scripts/grade.test.mjs`
 
 The ground-truth lines the parser reads are `ground-truth.sh`'s as it
-prints them at 8e8a24a: `== <path>`, `  origin/<branch>: <sha> ...`,
+prints them at 75995af: `== <path>`, `  origin/<branch>: <sha> ...`,
 `    <path> [<branch>]: <state>` under `  worktrees:`, and
-`    <branch>: <state>` under `  branches with no worktree, ...`. Run the
-script with repo paths (as `/handoff` does), so the section names the
-repository by its folder.
+`    <branch>: <state>` under `  branches with no worktree, ...` (and no
+other section). The test's ground truth is the script's own output
+(`--no-fetch`) on a scratch repository built to hold every state it
+prints, with the paths, date and time made up. A branch is pushed when
+every commit of it is on origin: "not pushed" or "ahead <n>" says no
+first, even beside "merged into ... as rebased copies"; then a line level
+with origin (`= origin/<default>`, `= pushed`, or `pushed, ...` on a
+line with no worktree), behind it, merged, or on another origin branch
+says yes; anything else (LOCAL ONLY, "not on origin, only on <remote>")
+says no. A State claim belongs to the branches its own clause names (a
+clause runs between commas, semicolons, "and", "but" and "while"), else
+to those the sentence named last.
 
 - [ ] Write the failing tests at the named seams. Append to `scripts/grade.test.mjs`:
 
 ```js
 // ---- T4: handoff
 
+// ground-truth.sh's own output (--no-fetch) on a scratch repo built to hold each branch state it prints, with the
+// paths, the date and the origin/main line's time made up. feat-g and feat-r landed as rebased copies.
 const GT = [
-  'GROUND TRUTH, 2030-01-02 09:00 PST', '', '== ~/proj',
-  '  origin/main: 8e8a24a 01-02 08:48 Merge pull request #17',
+  'GROUND TRUTH, 2030-01-02 09:00 PST (--no-fetch: compared with the last fetch)', '',
+  '== ~/proj',
+  '  origin/main: 18a7516 01-02 08:58 r2',
   '  worktrees:',
-  '    ~/proj [main]: ahead 0 / behind 2 of origin/main',
-  '    ~/proj/.claude/worktrees/a [feat-a]: = pushed, merged into origin/main',
-  '    ~/proj/.claude/worktrees/b [feat-b]: = pushed, 1 patch(es) not in origin/main',
-  '    ~/proj/.claude/worktrees/c [feat-c]: LOCAL ONLY: on no remote at all (or squash-merged, then deleted)',
+  '    ~/proj [main]: = origin/main',
+  '    ~/proj-wt/a [feat-a]: = pushed, merged into origin/main',
+  '    ~/proj-wt/b [feat-b]: = pushed, 1 patch(es) not in origin/main',
+  '    ~/proj-wt/c [feat-c]: LOCAL ONLY: on no remote at all (or squash-merged, then deleted)',
+  '    ~/proj-wt/f [feat-f]: ahead 1 / behind 0 of the pushed branch, 2 patch(es) not in origin/main',
+  '    ~/proj-wt/g [feat-g]: ahead 1 / behind 0 of the pushed branch, merged into origin/main as rebased copies',
   '  branches with no worktree, not in origin/main:',
-  '    feat-d: ahead 3 / behind 0 of the pushed branch',
-  '    feat-e: not on origin, only on upstream',
-  '  open PRs (o/proj):', '    #16 [feat-b] draft CI green, no Review line: B', '', 'GROUND TRUTH: complete', '',
+  '    feat-d: 1 commit(s) not pushed, 2 patch(es) not in origin/main',
+  '    feat-e: not on origin, only on upstream/feat-e',
+  '    feat-r: 1 commit(s) not pushed, merged into origin/main as rebased copies',
+  '    feat-x: pushed, 1 patch(es) not in origin/main',
+  '    showcase/2030-01-01-old: LOCAL ONLY: on no remote at all (or squash-merged, then deleted)',
+  '  showcase branches older than 14 days:',
+  '    showcase/2030-01-01-old: 40 days old',
+  '  open PRs: not a GitHub repo (a local path)', '',
+  'GROUND TRUTH: complete', '',
 ].join('\n');
 
-test('parseGroundTruth: the base head and each branch state, worktree lines and no-worktree lines', () => {
+test('parseGroundTruth: the base head and each branch state, from worktree lines and no-worktree lines only', () => {
   const [r] = G.parseGroundTruth(GT);
   assert.equal(r.path, '~/proj');
-  assert.deepEqual(r.base, { branch: 'main', sha: '8e8a24a' });
-  assert.deepEqual(Object.keys(r.branches), ['main', 'feat-a', 'feat-b', 'feat-c', 'feat-d', 'feat-e']);
-  assert.equal(r.branches['feat-d'], 'ahead 3 / behind 0 of the pushed branch');
+  assert.deepEqual(r.base, { branch: 'main', sha: '18a7516' });
+  assert.deepEqual(Object.keys(r.branches), ['main', 'feat-a', 'feat-b', 'feat-c', 'feat-f', 'feat-g', 'feat-d', 'feat-e', 'feat-r', 'feat-x', 'showcase/2030-01-01-old']);
+  assert.equal(r.branches['feat-x'], 'pushed, 1 patch(es) not in origin/main');
+  assert.equal(r.branches['showcase/2030-01-01-old'], 'LOCAL ONLY: on no remote at all (or squash-merged, then deleted)');
 });
 
-test('checkHandoff: a clean block has none; each false header and State claim, sha and missing count is one', () => {
-  const ok = 'Repo: proj, feat-a @ 1234567 (pushed and merged)\nState: feat-b is pushed, not merged; Rulings asked of the owner: 1; made by Claude: 0.\nYour task: x\n';
+test('checkHandoff: a true block has none; each false header and State clause, sha and missing count is one', () => {
+  const ok = [
+    'Repo: proj, main @ 18a7516 (pushed and merged); proj, feat-x @ 1234567 (pushed); proj, feat-r @ 1234567 (not pushed)',
+    'State: Merged PR 17 (feat-a) and pushed feat-b for review. feat-b is pushed, not merged; feat-g is merged, not pushed.',
+    'Rulings asked of the owner: 1; made by Claude: 0.', 'Your task: x', '',
+  ].join('\n');
   assert.deepEqual(G.checkHandoff(ok, GT), []);
   const bad = [
-    'Repo: proj, feat-b @ 1234567 (pushed and merged); proj, main @ 1111111 (pushed); nope, x @ 2222222 (pushed)',
-    'State: feat-c is pushed. feat-d is pushed too. feat-e is pushed. feat-a is not merged. feat-z is merged.',
+    'Repo: proj, feat-b @ 1234567 (pushed and merged); proj, main @ 1111111 (pushed); nope, x @ 2222222 (pushed); proj, feat-x @ 1234567 (not pushed); proj, feat-a @ 1234567 (local only)',
+    'State: feat-c is pushed. feat-d is pushed too. feat-e is pushed. feat-f is pushed. feat-a is pushed, but not merged. feat-z is merged.',
     'Your task: none',
   ].join('\n');
   assert.deepEqual(G.checkHandoff(bad, GT), [
     'header: feat-b claimed merged; ground truth: = pushed, 1 patch(es) not in origin/main',
-    'header: main @ 1111111; ground truth: origin/main at 8e8a24a',
+    'header: main @ 1111111; ground truth: origin/main at 18a7516',
     'header: repo nope is not in ground truth',
+    'header: feat-x claimed not pushed; ground truth: pushed, 1 patch(es) not in origin/main',
+    'header: feat-a claimed not pushed; ground truth: = pushed, merged into origin/main',
     'State: feat-c claimed pushed; ground truth: LOCAL ONLY: on no remote at all (or squash-merged, then deleted)',
-    'State: feat-d claimed pushed; ground truth: ahead 3 / behind 0 of the pushed branch',
-    'State: feat-e claimed pushed; ground truth: not on origin, only on upstream',
+    'State: feat-d claimed pushed; ground truth: 1 commit(s) not pushed, 2 patch(es) not in origin/main',
+    'State: feat-e claimed pushed; ground truth: not on origin, only on upstream/feat-e',
+    'State: feat-f claimed pushed; ground truth: ahead 1 / behind 0 of the pushed branch, 2 patch(es) not in origin/main',
     'State: feat-a claimed not merged; ground truth: = pushed, merged into origin/main',
     'State: no "Rulings asked of the owner: N; made by Claude: M" line',
   ]);
@@ -1299,11 +1466,11 @@ test('handoff CLI: exit 1 and a row with the count; a cold start row carries its
 });
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 3 failing of 14 (2 skipped: the oracle is not beside the script), these:
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 3 failing of 16, these:
 
 ```
-✖ parseGroundTruth: the base head and each branch state, worktree lines and no-worktree lines
-✖ checkHandoff: a clean block has none; each false header and State claim, sha and missing count is one
+✖ parseGroundTruth: the base head and each branch state, from worktree lines and no-worktree lines only
+✖ checkHandoff: a true block has none; each false header and State clause, sha and missing count is one
 ✖ handoff CLI: exit 1 and a row with the count; a cold start row carries its questions
 ```
 
@@ -1340,8 +1507,11 @@ export function parseGroundTruth(text) {
   }
   return repos;
 }
-// Pushed: a state that says so, or that is merged or behind the pushed branch; "not on origin" also says "on origin".
-const isPushed = (state) => !/not on origin/.test(state) && /= pushed|merged into|ahead 0 \/|on origin/.test(state);
+// Pushed: every commit of the branch is on origin. "not pushed" and "ahead <n>" (of the default or the pushed
+// branch) say no, first, even beside "merged into ... as rebased copies"; then a line level with origin ("= origin/
+// <default>", "= pushed", or "pushed, ..." on a line with no worktree), behind it, merged, or on another origin
+// branch says yes. Anything else (LOCAL ONLY, "not on origin, only on <remote>") says no.
+const isPushed = (state) => !/\bnot pushed\b|^ahead [1-9]/.test(state) && /^= |^pushed\b|^ahead 0 \/|merged into|\bonly on origin\/|^on origin\//.test(state);
 const isMerged = (state) => /merged into/.test(state);
 // Claims a phrase makes about one branch: pushed or not, merged or not (absent when it says nothing).
 function claims(words) {
@@ -1354,7 +1524,9 @@ function claims(words) {
   return c;
 }
 // Every claim in the block's header (Repo: <name>, <branch> @ <sha> (<claims>), several separated by ";") and in
-// each State sentence that names a known branch, checked against ground truth; plus the ruling count line.
+// each State clause that names a known branch, checked against ground truth; plus the ruling count line. A clause
+// is a stretch of a sentence between commas, semicolons, "and", "but" and "while"; one that names no branch
+// speaks of the branches the sentence named last.
 export function checkHandoff(block, groundTruth) {
   const repos = parseGroundTruth(groundTruth);
   const out = [];
@@ -1389,12 +1561,15 @@ export function checkHandoff(block, groundTruth) {
   }
   const state = /State:([\s\S]*?)(?:\n\s*(?:Your task|Awaiting owner word|Verify|Watch-items):|$)/.exec(block);
   if (state) {
+    const known = repos.flatMap((repo) => Object.keys(repo.branches).map((branch) => ({
+      repo, branch, re: new RegExp(`(^|[\\s\`(])${branch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([\\s\`),.;]|$)`),
+    })));
     for (const sentence of state[1].replace(/\s+/g, ' ').split(/(?<=[.;])\s+/)) {
-      for (const repo of repos) {
-        for (const branch of Object.keys(repo.branches)) {
-          const re = new RegExp(`(^|[\\s\`(])${branch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([\\s\`),.;]|$)`);
-          if (re.test(sentence)) check('State', repo, branch, claims(sentence));
-        }
+      let last = [];
+      for (const clause of sentence.split(/[,;]| and | but | while /)) {
+        const here = known.filter((k) => k.re.test(clause));
+        if (here.length) last = here;
+        for (const k of last) check('State', k.repo, k.branch, claims(clause));
       }
     }
   }
@@ -1444,17 +1619,26 @@ the first draft got wrong, which is the grade.
 ## 5. Human handoff (opt-in: only when the hint says "human")
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 12 pass, 0 fail, 2 skipped, of 14 (the skips name the missing oracle).
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 16 pass, 0 fail, 0 skipped, of 16.
 
 - [ ] Mutant runs, one at a time on the full suite with `scripts/guard-oracle.mjs` present, restored after each, under a timeout of 300 s. Each must fail the tests named:
 
-  - **"not on origin" reads as pushed**: in `scripts/grade.mjs` replace `!/not on origin/.test(state) &&` with `(nothing)`; fails: "checkHandoff: a clean block has none; each false header and State claim, sha and missing count is one".
-  - **no sha check**: in `scripts/grade.mjs` replace `if (sha && repo.base && repo.base.branch === branch && !repo.base.sha.startsWith(sha)` with `if (false && sha && repo.base && repo.base.branch === branch && !repo.base.sha.startsWith(sha)`; fails: "checkHandoff: a clean block has none; each false header and State claim, sha and missing count is one".
-  - **State goes unchecked**: in `scripts/grade.mjs` replace `if (re.test(sentence)) check` with `if (false) check`; fails: "checkHandoff: a clean block has none; each false header and State claim, sha and missing count is one".
+  - **no-worktree lines read in any section**: in `scripts/grade.mjs` replace `if (br && others)` with `if (br)`; fails: "parseGroundTruth: the base head and each branch state, from worktree lines and no-worktree lines only".
+  - **level with origin reads as not pushed**: in `scripts/grade.mjs` replace `/^= |^pushed` with `/^pushed`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **a no-worktree "pushed, ..." reads as not pushed**: in `scripts/grade.mjs` replace `|^pushed\b|^ahead 0` with `|^ahead 0`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **"not pushed" reads as pushed**: in `scripts/grade.mjs` replace `!/\bnot pushed\b|^ahead [1-9]/` with `!/^ahead [1-9]/`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **ahead of the pushed branch reads as pushed**: in `scripts/grade.mjs` replace `!/\bnot pushed\b|^ahead [1-9]/` with `!/\bnot pushed\b/`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **a not-pushed claim is never checked**: in `scripts/grade.mjs` replace `` if (c.pushed === false && isPushed(st)) out.push(`${where}: ${branch} claimed not pushed; ground truth: ${st}`); `` with (nothing); fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **"local only" is not a not-pushed claim**: in `scripts/grade.mjs` replace `if (/\b(not pushed|unpushed|local only)\b/.test(w)) c.pushed = false;` with `if (/\b(not pushed|unpushed)\b/.test(w)) c.pushed = false;`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **no sha check**: in `scripts/grade.mjs` replace `if (sha && repo.base && repo.base.branch === branch && !repo.base.sha.startsWith(sha)` with `if (false && sha && repo.base && repo.base.branch === branch && !repo.base.sha.startsWith(sha)`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **State goes unchecked**: in `scripts/grade.mjs` replace `for (const k of last) check('State', k.repo, k.branch, claims(clause));` with (nothing); fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **claims are read per sentence**: in `scripts/grade.mjs` replace `sentence.split(/[,;]| and | but | while /)` with `[sentence]`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **a clause naming no branch claims nothing**: in `scripts/grade.mjs` replace `if (here.length) last = here;` with `last = here;`; fails: "checkHandoff: a true block has none; each false header and State clause, sha and missing count is one".
+  - **a cold start drops its questions**: in `scripts/grade.mjs` replace `questions: Number(opt.questions ?? 0)` with `questions: 0`; fails: "handoff CLI: exit 1 and a row with the count; a cold start row carries its questions".
 
 - [ ] Commit: "Grade: check a handoff block against ground truth"; the
   body says the check runs once, before emitting, so its row grades the
-  first draft.
+  first draft, and that its test reads the script's real output.
 
 ### T5: minting
 
@@ -1462,95 +1646,176 @@ the first draft got wrong, which is the grade.
 **Files:** modify `scripts/grade.mjs`, `commands/handoff.md` (step 1),
 `commands/reflect.md`; test `scripts/grade.test.mjs`
 **Seams:** `selfCheck(fixture, repoDir)`, `writeMinted(fixture, repoDir, outDir)`, `wordsRegex(subject)`, `fromHistory(repoDir, {base, days, repoName})`; the CLI `mint` and `mint --from-history`
-**Interfaces:** consumes `checkFixture`; produces `selfCheck -> [problem]`,
+**Interfaces:** consumes `checkFixture`, `localDir`; produces
+`selfCheck -> [problem]` (every problem, or only the missing head),
 `writeMinted -> fixture` (with `status`), `wordsRegex -> string`,
-`fromHistory -> [fixture]`
+`fromHistory -> [fixture]`, `HISTORY_SOURCE`
 **Verify:** `node --test scripts/grade.test.mjs`
 
-A fix commit, for `--from-history`, is a first-parent commit on the base
-branch whose subject names a fix, or any commit within 30 days after a
-merge; its changed lines are blamed back, and those written by a merged
-pull request (reachable from the merge's second parent, not its first)
-mint a fixture at that pull request's head (after the SZZ method:
-Sliwerski, Zimmermann and Zeller, "When Do Changes Induce Fixes?", MSR
-2005).
+`--from-history` follows the owner's rulings, after the SZZ method
+(Sliwerski, Zimmermann and Zeller, "When Do Changes Induce Fixes?", MSR
+2005). Each first-parent commit on the base branch lands one pull
+request: a merge, the commits its second parent brings in (head the
+second parent, base the first); any other commit, a squash merge, is a
+pull request of its own (head itself, base its parent). Every non-merge
+commit reachable from the base branch, roots aside, is read: its changed
+lines are blamed back, and lines from a different pull request (one that
+landed earlier, since blame reads only ancestors) make it a fix of that
+pull request when its subject names a fix or it comes within 30 days of
+that landing. Each such pull request gets a `clearing-review` fixture at
+its head, one key entry per fix. A fixture mined from history leaves
+draft only with a test probe on every entry: its regex is the fix's own
+subject words, so matching its source proves nothing, and a refactor or a
+format fix has no test to fail. Run on this repository at 75995af
+(without the self-check, which runs each probe), `fromHistory` found 8
+pull requests with fixes and 13 key entries, 4 of them with a test probe;
+read first-parent only, as the first draft of this plan did, it found
+none.
 
 - [ ] Write the failing tests at the named seams. Append to `scripts/grade.test.mjs`:
 
 ```js
 // ---- T5: minting
 
-// A repo whose main has: base (lines 1 and 2); a merged PR adding a bug as line 3 of lib.mjs; a fix commit that
-// changes line 3, and line 1 (from base, not the PR), and adds a test which fails on the bug.
+// A repo whose main has: base (lines 1 and 2); a merged PR adding a bug as line 3 of lib.mjs, with a test too weak
+// to see it; a fix commit that changes line 3, and line 1 (from base, not the PR), and makes the test see the bug.
+// blame.showRoot is on, as an owner may set it: a root commit's lines must still find no pull request.
 function historyRepo(t) {
   const dir = tmp(t);
-  const env = ['-c', 'user.name=t', '-c', 'user.email=t', '-c', 'core.autocrlf=false', '-c', 'init.defaultBranch=main'];
-  const g = (...a) => { const r = spawnSync('git', [...env, '-C', dir, ...a], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
+  const g = (...a) => gitIn(dir, ...a);
   g('init', '-q');
+  g('config', 'blame.showRoot', 'true');
+  const test = (call, want) => `import { half } from './lib.mjs';\nimport assert from 'node:assert';\nimport { test } from 'node:test';\ntest('half', () => assert.equal(${call}, ${want}));\n`;
   fs.writeFileSync(path.join(dir, 'lib.mjs'), 'export const add = (a, b) => a + b;\nexport const mul = (a, b) => a * b;\n');
   g('add', '-A'); g('commit', '-qm', 'base');
   g('checkout', '-qb', 'pr');
   fs.appendFileSync(path.join(dir, 'lib.mjs'), 'export const half = (x) => x / 3;\n');
-  g('commit', '-qam', 'Add half');
+  fs.writeFileSync(path.join(dir, 'lib.test.mjs'), test('half(0)', 0));
+  g('add', '-A'); g('commit', '-qm', 'Add half');
   g('checkout', '-q', 'main');
   g('merge', '-q', '--no-ff', '-m', 'Merge pull request #1 from pr', 'pr');
   fs.writeFileSync(path.join(dir, 'lib.mjs'), 'export const add = (a, b) => b + a;\nexport const mul = (a, b) => a * b;\nexport const half = (x) => x / 2;\n');
-  fs.writeFileSync(path.join(dir, 'lib.test.mjs'), "import { half } from './lib.mjs';\nimport assert from 'node:assert';\nimport { test } from 'node:test';\ntest('half', () => assert.equal(half(4), 2));\n");
+  fs.writeFileSync(path.join(dir, 'lib.test.mjs'), test('half(4)', 2));
   g('add', '-A'); g('commit', '-qm', 'Fix half dividing by three');
   return { dir, g };
 }
 
-test('wordsRegex: the two longest words of a subject, both required, in either order', () => {
+test('wordsRegex: the two longest words of a subject but stop words, both required, in either order', () => {
   const re = new RegExp(G.wordsRegex('Fix half dividing by three'), 'i');
   assert.equal(G.wordsRegex('Fix half dividing by three'), '(?=[\\s\\S]*\\bdividing\\b)(?=[\\s\\S]*\\bthree\\b)');
   assert.ok(re.test('Major: three is the wrong divisor; dividing by it halves nothing'));
   assert.ok(!re.test('Major: dividing is wrong'));
+  assert.equal(G.wordsRegex('Fixed sign flip'), '(?=[\\s\\S]*\\bflip\\b)(?=[\\s\\S]*\\bsign\\b)');
 });
 
-test('fromHistory and selfCheck: the fix blames to the PR; its test fails at the PR head and passes at the fix', (t) => {
+test('fromHistory and selfCheck: the fix blames to the PR; the fix\'s test fails at the PR head and passes at the fix; every problem is named', (t) => {
   const { dir, g } = historyRepo(t);
-  const [f] = G.fromHistory(dir, { repoName: 'local/proj' });
+  const all = G.fromHistory(dir, { repoName: 'local/proj' });
   const pr = g('rev-parse', 'pr');
-  assert.equal(f.id, `hist-${pr.slice(0, 7)}`);
+  assert.deepEqual(all.map((f) => f.id), [`hist-${pr.slice(0, 7)}`], 'line 1 blames to the root commit, which is no pull request');
+  const [f] = all;
   assert.equal(f.head, pr);
   assert.equal(f.key.length, 1);
-  assert.deepEqual(f.key[0].locator, { file: 'lib.mjs', lines: [3, 3] }, 'line 1 blames to base, outside the PR');
+  assert.deepEqual(f.key[0].locator, { file: 'lib.mjs', lines: [3, 3] });
   assert.deepEqual(f.key[0].probe, { kind: 'test', file: 'lib.test.mjs', command: 'node --test lib.test.mjs' });
-  assert.deepEqual(G.selfCheck(f, dir), []);
+  assert.deepEqual(G.selfCheck(f, dir), [], 'the PR\'s own weak test passes at head; the fix\'s copy fails there');
   const out = tmp(t);
   assert.equal(G.writeMinted(f, dir, out).status, 'ready');
   assert.equal(JSON.parse(fs.readFileSync(path.join(out, f.id, 'fixture.json'), 'utf8')).status, 'ready');
+  const k = f.key[0].id;
   const broken = { ...f, key: [{ ...f.key[0], match: 'nothing like it' }, { ...f.key[0], id: 'b', locator: { file: 'gone.mjs', lines: [1, 1] } }] };
-  assert.deepEqual(G.selfCheck(broken, dir), [`${f.key[0].id}: match does not match its source`]);
+  assert.deepEqual(G.selfCheck(broken, dir), [`${k}: match does not match its source`, 'b: gone.mjs is not at head']);
   assert.equal(G.writeMinted({ ...broken, id: 'broken' }, dir, out).status, 'draft');
   const noFix = { ...f, key: [{ ...f.key[0], fix_commit: undefined }] };
-  assert.deepEqual(G.selfCheck(noFix, dir), [`${f.key[0].id}: a test probe needs a fix commit`]);
+  assert.deepEqual(G.selfCheck(noFix, dir), [`${k}: a test probe needs a fix commit`]);
   const passesAtHead = { ...f, head: g('rev-parse', 'HEAD') };
-  assert.deepEqual(G.selfCheck(passesAtHead, dir), [`${f.key[0].id}: the probe passes at head`]);
+  assert.deepEqual(G.selfCheck(passesAtHead, dir), [`${k}: the probe passes at head`]);
+  const failsAtFix = { ...f, key: [{ ...f.key[0], probe: { ...f.key[0].probe, command: 'exit 1' } }] };
+  assert.deepEqual(G.selfCheck(failsAtFix, dir), [`${k}: the probe fails at the fix commit`]);
 });
 
 test('fromHistory: a commit past the window that names no fix mints nothing', (t) => {
   const { dir, g } = historyRepo(t);
-  g('-c', 'user.name=t', 'commit', '-q', '--amend', '-m', 'Tidy half', '--date', '2099-01-01T00:00:00');
+  g('commit', '-q', '--amend', '-m', 'Tidy half', '--date', '2099-01-01T00:00:00');
   spawnSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t', 'commit', '-q', '--amend', '--no-edit'], { env: { ...process.env, GIT_COMMITTER_DATE: '2099-01-01T00:00:00' } });
   assert.deepEqual(G.fromHistory(dir, { days: 30 }), []);
 });
+
+// A repo for the pull-request rules: a squash merge S adds a bug; a pull request P adds a second bug, fixes it in
+// its own next commit, then fixes S's; after P merges, a refactor with no test renames P's line.
+function rulesRepo(t) {
+  const dir = tmp(t);
+  const at = (day) => ({ ...process.env, GIT_AUTHOR_DATE: `2030-01-0${day}T00:00:00`, GIT_COMMITTER_DATE: `2030-01-0${day}T00:00:00` });
+  const g = (day, ...a) => {
+    const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t', '-c', 'core.autocrlf=false', '-c', 'init.defaultBranch=main', '-C', dir, ...a], { encoding: 'utf8', env: at(day) });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+  const lib = (...lines) => fs.writeFileSync(path.join(dir, 'lib.mjs'), lines.map((l) => `export const ${l};\n`).join(''));
+  g(1, 'init', '-q');
+  lib('a = 1');
+  g(1, 'add', '-A'); g(1, 'commit', '-qm', 'base');
+  const root = g(1, 'rev-parse', 'HEAD');
+  lib('a = 1', 'b = 3');
+  g(2, 'commit', '-qam', 'Add b (#2)');
+  const s = g(2, 'rev-parse', 'HEAD');
+  g(3, 'checkout', '-qb', 'p');
+  lib('a = 1', 'b = 3', 'c = 30');
+  g(3, 'commit', '-qam', 'Add c');
+  lib('a = 1', 'b = 3', 'c = 3');
+  g(4, 'commit', '-qam', 'Fix c typo');
+  lib('a = 1', 'b = 2', 'c = 3');
+  g(5, 'commit', '-qam', 'Fix b off by one');
+  const p = g(5, 'rev-parse', 'HEAD');
+  g(6, 'checkout', '-q', 'main');
+  g(6, 'merge', '-q', '--no-ff', '-m', 'Merge pull request #3 from p', 'p');
+  lib('a = 1', 'b = 2', 'cee = 3');
+  g(7, 'commit', '-qam', 'Rename c for readability');
+  return { dir, root, s, p, refactor: g(7, 'rev-parse', 'HEAD') };
+}
+
+test('fromHistory: every commit is read; a squash merge is a pull request; a fix in its own pull request is not; with no test, a draft', (t) => {
+  const { dir, root, s, p, refactor } = rulesRepo(t);
+  const all = G.fromHistory(dir, { repoName: 'local/r' });
+  assert.deepEqual(all.map((f) => [f.id, f.head, f.base, f.key.map((e) => e.fix_commit)]), [
+    [`hist-${p.slice(0, 7)}`, p, s, [refactor]],
+    [`hist-${s.slice(0, 7)}`, s, root, [p]],
+  ]);
+  const out = tmp(t);
+  assert.deepEqual(all.map((f) => G.writeMinted(f, dir, out)).map((f) => [f.status, f.self_check]), [
+    ['draft', [`fix-${refactor.slice(0, 7)}: no test probe, which a fixture mined from history needs`]],
+    ['draft', [`fix-${p.slice(0, 7)}: no test probe, which a fixture mined from history needs`]],
+  ]);
+});
+
+test('mint CLI: fixtures mined from history land in grading/local, never beside the shipped ones', (t) => {
+  const h = tmp(t);
+  const { dir, g } = historyRepo(t);
+  const id = `hist-${g('rev-parse', 'pr').slice(0, 7)}`;
+  const r = cli(h, 'mint', '--from-history', dir, '--name', 'local/proj');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, new RegExp(`ready ${id}: 1 key entries\\nminted: 1, ready: 1`));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(h, 'grading', 'local', id, 'fixture.json'), 'utf8')).status, 'ready');
+  assert.ok(!fs.existsSync(path.join(h, 'grading', 'fixtures')));
+});
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 3 failing of 17 (2 skipped: the oracle is not beside the script), these:
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 5 failing of 21, these:
 
 ```
-✖ wordsRegex: the two longest words of a subject, both required, in either order
-✖ fromHistory and selfCheck: the fix blames to the PR; its test fails at the PR head and passes at the fix
+✖ wordsRegex: the two longest words of a subject but stop words, both required, in either order
+✖ fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named
 ✖ fromHistory: a commit past the window that names no fix mints nothing
+✖ fromHistory: every commit is read; a squash merge is a pull request; a fix in its own pull request is not; with no test, a draft
+✖ mint CLI: fixtures mined from history land in grading/local, never beside the shipped ones
 ```
 
   with errors such as
 
 ```
 TypeError: G.wordsRegex is not a function
-TypeError: G.fromHistory is not a function or its return value is not iterable
 TypeError: G.fromHistory is not a function
+AssertionError [ERR_ASSERTION]: grade: usage:
 ```
 
 - [ ] In `scripts/grade.mjs`, insert immediately before the line `// ---- command line`:
@@ -1579,16 +1844,20 @@ function probePasses(repo, rev, probe, fix) {
     fs.rmSync(wt, { recursive: true, force: true });
   }
 }
-// A minted fixture's self-check, against a local clone: each entry's regex matches the source's own words, its
-// locator's file exists at head, and its probe, where given, fails at head and passes at its fix commit.
+// A minted fixture's self-check, against a local clone, naming every problem: each entry's regex matches the
+// source's own words, its locator's file exists at head, and its probe, where given, fails at head and passes at
+// its fix commit. A fixture mined from history needs a test probe on every entry: its regex is built from the fix's
+// own subject, so matching its source proves nothing, and a refactor or a format fix has no test to fail.
+export const HISTORY_SOURCE = 'mined from history';
 export function selfCheck(fixture, repoDir) {
+  if (!gitOk(repoDir, 'cat-file', '-e', `${fixture.head}^{commit}`)) return [`head ${fixture.head} is not in ${repoDir}`];
   const problems = [];
-  if (!gitOk(repoDir, 'cat-file', '-e', `${fixture.head}^{commit}`)) problems.push(`head ${fixture.head} is not in ${repoDir}`);
   for (const e of fixture.key) {
     const words = e.source ?? fixture.source;
     if (!new RegExp(e.match, 'i').test(words)) problems.push(`${e.id}: match does not match its source`);
-    if (!problems.length && e.locator.file && !gitOk(repoDir, 'cat-file', '-e', `${fixture.head}:${e.locator.file}`)) problems.push(`${e.id}: ${e.locator.file} is not at head`);
-    if (!problems.length && e.probe?.kind === 'test') {
+    if (e.locator.file && !gitOk(repoDir, 'cat-file', '-e', `${fixture.head}:${e.locator.file}`)) problems.push(`${e.id}: ${e.locator.file} is not at head`);
+    if (fixture.source.startsWith(HISTORY_SOURCE) && e.probe?.kind !== 'test') problems.push(`${e.id}: no test probe, which a fixture mined from history needs`);
+    if (e.probe?.kind === 'test') {
       if (!e.fix_commit) problems.push(`${e.id}: a test probe needs a fix commit`);
       else {
         if (probePasses(repoDir, fixture.head, e.probe, e.fix_commit)) problems.push(`${e.id}: the probe passes at head`);
@@ -1615,21 +1884,25 @@ export function wordsRegex(subject) {
     .sort((a, b) => b.length - a.length || a.localeCompare(b)).slice(0, 2);
   return words.map((w) => `(?=[\\s\\S]*\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b)`).join('') || subject;
 }
-// After the SZZ method (Sliwerski, Zimmermann and Zeller, MSR 2005): for each first-parent commit on base that
-// names a fix, or that comes within days of a merge, blame the lines it changes back to the commits that wrote
-// them; where those belong to a merged pull request (reachable from its second parent, not its first), mint a
-// draft-or-ready clearing-review fixture at that pull request's head.
+// After the SZZ method (Sliwerski, Zimmermann and Zeller, MSR 2005). Each first-parent commit on base lands one
+// pull request: a merge, what its second parent brings in; any other commit (a squash merge), itself. For every
+// non-merge commit reachable from base but a root, blame the lines it changes back to the commits that wrote them;
+// lines from a different pull request, which landed earlier since blame reads only ancestors, make it a fix of that
+// pull request when its subject names a fix or it comes within days of that landing. Each such pull request gets a
+// draft-or-ready clearing-review fixture at its head.
 export function fromHistory(repoDir, { base = 'main', days = 30, repoName = repoDir } = {}) {
-  const merges = git(repoDir, 'log', '--first-parent', '--merges', '--format=%H %P %ct', base).split('\n').filter(Boolean)
-    .map((l) => { const [m, p1, p2, t] = l.split(' '); return { m, p1, p2, t: Number(t) }; });
-  const commits = git(repoDir, 'log', '--first-parent', '--no-merges', '--format=%H %ct %s', base).split('\n').filter(Boolean)
-    .map((l) => { const [h, t, ...s] = l.split(' '); return { h, t: Number(t), subject: s.join(' ') }; });
-  const inPr = (pr, c) => gitOk(repoDir, 'merge-base', '--is-ancestor', c, pr.p2) && !gitOk(repoDir, 'merge-base', '--is-ancestor', c, pr.p1);
+  const prOf = new Map();
+  for (const l of git(repoDir, 'log', '--first-parent', '--format=%H %ct %P', base).split('\n').filter(Boolean)) {
+    const [m, t, p1, p2] = l.split(' ');
+    const pr = p2 ? { m, head: p2, base: p1, t: Number(t) } : { m, head: m, base: p1, t: Number(t) };
+    for (const c of p2 ? git(repoDir, 'rev-list', `${p1}..${p2}`).split('\n').filter(Boolean) : [m]) prOf.set(c, pr);
+  }
+  const commits = git(repoDir, 'log', '--no-merges', '--format=%H %ct %P%x09%s', base).split('\n').filter(Boolean)
+    .map((l) => { const [meta, ...s] = l.split('\t'); const [h, t, p] = meta.split(' '); return { h, t: Number(t), root: !p, subject: s.join('\t') }; });
   const found = new Map();
   for (const c of commits) {
+    if (c.root) continue;
     const named = /\bfix(e[sd])?\b/i.test(c.subject);
-    const recent = merges.filter((pr) => c.t > pr.t && c.t - pr.t <= days * 86400);
-    if (!named && !recent.length) continue;
     const diff = git(repoDir, 'diff', '-U0', `${c.h}^`, c.h);
     let file = null;
     const blamed = new Set();
@@ -1641,16 +1914,22 @@ export function fromHistory(repoDir, { base = 'main', days = 30, repoName = repo
       if (!h || !file || h[2] === '0') continue;
       const from = Number(h[1]);
       const to = from + Number(h[2] ?? 1) - 1;
-      const out = git(repoDir, 'blame', '-l', '-s', '-L', `${from},${to}`, `${c.h}^`, '--', file);
-      for (const b of out.split('\n')) blamed.add(`${b.slice(0, 40).replace(/^\^/, '')}\t${file}\t${from}\t${to}`);
+      // A line from a root commit blames as "^" and 39 characters (whatever blame.showRoot says), so it finds no
+      // pull request: a root has no base to review against.
+      const out = git(repoDir, '-c', 'blame.showRoot=false', 'blame', '-l', '-s', '-L', `${from},${to}`, `${c.h}^`, '--', file);
+      for (const b of out.split('\n')) blamed.add(`${b.slice(0, 40)}\t${file}\t${from}\t${to}`);
     }
-    for (const pr of named ? merges : recent) {
-      const mine = [...blamed].filter((b) => inPr(pr, b.split('\t')[0]));
-      if (!mine.length) continue;
-      const [, file2, from, to] = mine[0].split('\t');
+    const mine = new Map();
+    for (const b of blamed) {
+      const pr = prOf.get(b.split('\t')[0]);
+      if (!pr || pr === prOf.get(c.h) || mine.has(pr)) continue;
+      if (named || (c.t > pr.t && c.t - pr.t <= days * 86400)) mine.set(pr, b);
+    }
+    for (const [pr, b] of mine) {
+      const [, file2, from, to] = b.split('\t');
       const test = git(repoDir, 'diff', '--name-only', `${c.h}^`, c.h).split('\n').find((p) => /\.test\.(m?js|sh)$/.test(p));
-      const id = `hist-${pr.p2.slice(0, 7)}`;
-      const fx = found.get(id) ?? { id, step: 'clearing-review', source: `mined from history: fixes after ${pr.m.slice(0, 7)}`, repo: repoName, head: pr.p2, base: pr.p1, held_out: [], key: [] };
+      const id = `hist-${pr.head.slice(0, 7)}`;
+      const fx = found.get(id) ?? { id, step: 'clearing-review', source: `${HISTORY_SOURCE}: fixes after ${pr.m.slice(0, 7)}`, repo: repoName, head: pr.head, base: pr.base, held_out: [], key: [] };
       fx.key.push({ id: `fix-${c.h.slice(0, 7)}`, class: 'fixed after merge', match: wordsRegex(c.subject), source: c.subject,
         locator: { file: file2, lines: [Number(from), Number(to)] }, fix_commit: c.h,
         ...(test ? { probe: { kind: 'test', file: test, command: test.endsWith('.sh') ? `bash ${test}` : `node --test ${test}` } } : {}) });
@@ -1667,7 +1946,7 @@ export function fromHistory(repoDir, { base = 'main', days = 30, repoName = repo
 ```js
   mint(argv) {
     const { pos, opt } = parseArgs(argv, { clone: 1, out: 1, 'from-history': 1, base: 1, days: 1, name: 1 });
-    const out = opt.out ?? path.join(home(), 'grading', 'fixtures');
+    const out = opt.out ?? localDir();
     if (opt['from-history']) {
       const repo = opt['from-history'];
       const minted = fromHistory(repo, { base: opt.base ?? 'main', days: Number(opt.days ?? 30), repoName: opt.name ?? repo })
@@ -1721,7 +2000,7 @@ line's own words), `locator` (`{"file": <path>, "lines": [a, b]}` at `head`;
 (`{"kind": "test", "file": <the fix's test file>, "command": <its run command>}`)
 where the fix added a test. Then run
 `node ~/.claude/scripts/grade.mjs mint <draft> --clone <repo>`: it self-checks
-the fixture and writes it to `~/.claude/grading/fixtures/`, `ready`, or `draft`
+the fixture and writes it to `~/.claude/grading/local/`, `ready`, or `draft`
 naming what failed (a draft stays out of the table). Name each minted fixture
 and its status in the block's State.
 ```
@@ -1743,25 +2022,39 @@ with
   read and the fix commit, if any (`/handoff` mints a grading fixture from it).
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 15 pass, 0 fail, 2 skipped, of 17 (the skips name the missing oracle).
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 21 pass, 0 fail, 0 skipped, of 21.
 
 - [ ] Mutant runs, one at a time on the full suite with `scripts/guard-oracle.mjs` present, restored after each, under a timeout of 300 s. Each must fail the tests named:
 
-  - **no passes-at-head check**: in `scripts/grade.mjs` replace `if (probePasses(repoDir, fixture.head, e.probe, e.fix_commit)) problems.push` with `if (false) problems.push`; fails: "fromHistory and selfCheck: the fix blames to the PR; its test fails at the PR head and passes at the fix".
-  - **the PR includes base commits**: in `scripts/grade.mjs` replace `&& !gitOk(repoDir, 'merge-base', '--is-ancestor', c, pr.p1);` with `;`; fails: "fromHistory and selfCheck: the fix blames to the PR; its test fails at the PR head and passes at the fix".
-  - **the probe keeps NODE_TEST_CONTEXT**: in `scripts/grade.mjs` replace `delete env.NODE_TEST_CONTEXT;` with `(nothing)`; fails: "fromHistory and selfCheck: the fix blames to the PR; its test fails at the PR head and passes at the fix".
-  - **the window is ignored**: in `scripts/grade.mjs` replace `if (!named && !recent.length) continue;` with `if (!named && false) continue;`; fails: "fromHistory and selfCheck: the fix blames to the PR; its test fails at the PR head and passes at the fix", "fromHistory: a commit past the window that names no fix mints nothing".
+  - **no stop words**: in `scripts/grade.mjs` replace `.filter((w) => !['this', 'that', 'with', 'from', 'when', 'into', 'fix', 'fixes', 'fixed'].includes(w))` with (nothing); fails: "wordsRegex: the two longest words of a subject but stop words, both required, in either order".
+  - **no locator-file check**: in `scripts/grade.mjs` replace `` if (e.locator.file && !gitOk(repoDir, 'cat-file', '-e', `${fixture.head}:${e.locator.file}`)) problems.push `` with `if (false) problems.push`; fails: "fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named".
+  - **a history fixture with no test can be ready**: in `scripts/grade.mjs` replace `` if (fixture.source.startsWith(HISTORY_SOURCE) && e.probe?.kind !== 'test') problems.push(`${e.id}: no test probe, which a fixture mined from history needs`); `` with (nothing); fails: "fromHistory: every commit is read; a squash merge is a pull request; a fix in its own pull request is not; with no test, a draft".
+  - **no passes-at-head check**: in `scripts/grade.mjs` replace `if (probePasses(repoDir, fixture.head, e.probe, e.fix_commit)) problems.push` with `if (false) problems.push`; fails: "fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named".
+  - **no fails-at-fix check**: in `scripts/grade.mjs` replace `if (!probePasses(repoDir, e.fix_commit, e.probe, null)) problems.push` with `if (false) problems.push`; fails: "fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named".
+  - **the fix's test is not copied in**: in `scripts/grade.mjs` replace `if (probe.file && fix) {` with `if (false) {`; fails: "fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named", "mint CLI: fixtures mined from history land in grading/local, never beside the shipped ones".
+  - **the probe keeps NODE_TEST_CONTEXT**: in `scripts/grade.mjs` replace `delete env.NODE_TEST_CONTEXT;` with (nothing); fails: "fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named", "mint CLI: fixtures mined from history land in grading/local, never beside the shipped ones".
+  - **a squash merge is no pull request**: in `scripts/grade.mjs` replace `: [m]) prOf.set(c, pr);` with `: []) prOf.set(c, pr);`; fails: "fromHistory: every commit is read; a squash merge is a pull request; a fix in its own pull request is not; with no test, a draft".
+  - **only first-parent commits are read**: in `scripts/grade.mjs` replace `'log', '--no-merges', '--format=%H %ct %P%x09%s', base` with `'log', '--first-parent', '--no-merges', '--format=%H %ct %P%x09%s', base`; fails: "fromHistory: every commit is read; a squash merge is a pull request; a fix in its own pull request is not; with no test, a draft".
+  - **a root commit is read as a fix**: in `scripts/grade.mjs` replace `if (c.root) continue;` with (nothing); fails: "fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named", "fromHistory: a commit past the window that names no fix mints nothing", "fromHistory: every commit is read; a squash merge is a pull request; a fix in its own pull request is not; with no test, a draft", "mint CLI: fixtures mined from history land in grading/local, never beside the shipped ones".
+  - **blame shows root commits**: in `scripts/grade.mjs` replace `'-c', 'blame.showRoot=false',` with (nothing); fails: "fromHistory and selfCheck: the fix blames to the PR; the fix's test fails at the PR head and passes at the fix; every problem is named", "mint CLI: fixtures mined from history land in grading/local, never beside the shipped ones".
+  - **a fix in its own pull request counts**: in `scripts/grade.mjs` replace `if (!pr || pr === prOf.get(c.h) || mine.has(pr)) continue;` with `if (!pr || mine.has(pr)) continue;`; fails: "fromHistory: every commit is read; a squash merge is a pull request; a fix in its own pull request is not; with no test, a draft".
+  - **the window is ignored**: in `scripts/grade.mjs` replace `if (named || (c.t > pr.t && c.t - pr.t <= days * 86400)) mine.set(pr, b);` with `if (named || c.t > pr.t) mine.set(pr, b);`; fails: "fromHistory: a commit past the window that names no fix mints nothing".
+  - **mint writes beside the shipped fixtures**: in `scripts/grade.mjs` replace `const out = opt.out ?? localDir();` with `const out = opt.out ?? path.join(home(), 'grading', 'fixtures');`; fails: "mint CLI: fixtures mined from history land in grading/local, never beside the shipped ones".
 
 - [ ] Commit: "Grade: mint fixtures from escapes and from history"; the
   body says a fixture that fails its self-check is kept as a draft and
-  stays out of the table.
+  stays out of the table, that a history fixture needs a test probe, and
+  that minted fixtures land in `~/.claude/grading/local/`.
 
 ### T6: citations and re-asks
 
 **Depends on:** T5
-**Files:** modify `scripts/grade.mjs`; test `scripts/grade.test.mjs`
+**Files:** modify `scripts/grade.mjs`, `skills/spec-first/SKILL.md`
+(step 5), `skills/critique/SKILL.md` (section 3), `commands/reflect.md`;
+test `scripts/grade.test.mjs`
 **Seams:** `exampleIds(text)`, `citations(transcripts, skillsDir, since)`, `reasks(ledger, since)`; the CLI `cite` and `reasks`
-**Interfaces:** produces `citations -> {counts, ambiguous, uncited}`,
+**Interfaces:** produces `citations -> {counts, ambiguous, uncited}` (its
+`transcripts` any iterable of texts; the CLI reads one file at a time),
 `reasks -> [{entry, repeats}]`
 **Verify:** `node --test scripts/grade.test.mjs`
 
@@ -1770,7 +2063,10 @@ written on 2026-11-26: one object a line; Claude's own turns have `type`
 `assistant`, a `timestamp`, and `message.content` as a list of blocks
 (`text` with `text`; `tool_use` with `name` and `input`, where a Skill
 call's `input.skill` names the skill and a Read's `input.file_path` the
-file).
+file). A subagent's transcript sits under
+`<project>/<session>/subagents/`, and `cite` reads those too. The three
+places that write ledger entries (spec-first, critique, `/reflect`) gain
+one sentence each, so `reasks` has lines to count.
 
 - [ ] Write the failing tests at the named seams. Append to `scripts/grade.test.mjs`:
 
@@ -1804,7 +2100,7 @@ test('reasks: both ledger forms, dated on or after since', () => {
 });
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 2 failing of 19 (2 skipped: the oracle is not beside the script), these:
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 2 failing of 23, these:
 
 ```
 ✖ citations: an ID counts for the one loaded file defining it; two loaded files sharing it is ambiguous
@@ -1890,7 +2186,9 @@ export function reasks(ledger, since = '0000-00-00') {
       const p = path.join(d, e.name);
       return e.isDirectory() ? walk(p) : e.name.endsWith('.jsonl') ? [p] : [];
     }) : []);
-    const r = citations(walk(projects).map(read), opt.skills ?? path.join(home(), 'skills'), opt.since);
+    // One transcript in memory at a time: the projects folder can hold gigabytes.
+    const texts = (function* () { for (const f of walk(projects)) yield read(f); })();
+    const r = citations(texts, opt.skills ?? path.join(home(), 'skills'), opt.since);
     for (const [k, n] of Object.entries(r.counts).sort()) console.log(`cited ${n}: ${k}`);
     for (const k of r.uncited) console.log(`uncited: ${k}`);
     console.log(`ambiguous: ${r.ambiguous}`);
@@ -1914,56 +2212,116 @@ export function reasks(ledger, since = '0000-00-00') {
   grade.mjs reasks [--since <date>] [<ledger file>]
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 17 pass, 0 fail, 2 skipped, of 19 (the skips name the missing oracle).
+- [ ] In `skills/spec-first/SKILL.md`, replace
+
+```md
+Claude's context on a separate labeled line) and a considered-and-declined list.
+If the repo names no location, ask. Self-review before showing it: no
+```
+
+with
+
+```md
+Claude's context on a separate labeled line) and a considered-and-declined list.
+When an answer repeats a ruling already in the ledger, the new entry gets a line
+`Re-asked: <ID>` naming the earlier entry. If the repo names no location, ask.
+Self-review before showing it: no
+```
+
+- [ ] In `skills/critique/SKILL.md`, replace
+
+```md
+context on a separate labeled line. Commit each fold on its own, so the next
+```
+
+with
+
+```md
+context on a separate labeled line. When an answer repeats a ruling already in the
+ledger, the new entry gets a line `Re-asked: <ID>` naming the earlier entry. Commit
+each fold on its own, so the next
+```
+
+- [ ] In `commands/reflect.md`, replace
+
+```md
+  option quotes the owner's words and the option text, marked as Claude-drafted.
+```
+
+with
+
+```md
+  option quotes the owner's words and the option text, marked as Claude-drafted.
+  When an answer repeats a ruling already in the ledger, the new entry gets a line
+  `Re-asked: <ID>` naming the earlier entry (`/grade term` counts them).
+```
+
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 23 pass, 0 fail, 0 skipped, of 23.
 
 - [ ] Mutant runs, one at a time on the full suite with `scripts/guard-oracle.mjs` present, restored after each, under a timeout of 300 s. Each must fail the tests named:
 
   - **text outside Claude's own counts**: in `scripts/grade.mjs` replace `if (o.type !== 'assistant' ||` with `if (o.type === 'nothing' ||`; fails: "citations: an ID counts for the one loaded file defining it; two loaded files sharing it is ambiguous".
-  - **re-asks ignore since**: in `scripts/grade.mjs` replace `if (m[2] < since) return;` with `(nothing)`; fails: "reasks: both ledger forms, dated on or after since".
+  - **re-asks ignore since**: in `scripts/grade.mjs` replace `if (m[2] < since) return;` with (nothing); fails: "reasks: both ledger forms, dated on or after since".
 
 - [ ] Commit: "Grade: count example citations and ledger re-asks"; the
   body says an uncited example is listed for `/reflect`, never retired by
-  the script.
+  the script, and names the three skills that now write `Re-asked:`.
 
 ### T7: field recall and perturb rows
 
 **Depends on:** T6
 **Files:** modify `scripts/grade.mjs`; test `scripts/grade.test.mjs`
 **Seams:** `stepOf(words)`, `fieldRecall(costs, since)`, `perturbRow(report, prs, branch)`; the CLI `field` and `perturb`
-**Interfaces:** produces `fieldRecall -> {steps: {<step>: {findings, escapes, recall}}, unread}`,
+**Interfaces:** produces `fieldRecall -> {steps: {<step>: {findings, escapes, recall}}, tags: {<tag>: {<step>: ...}}, unread}`,
 `perturbRow -> {branch, pieces, merged, closed, open, unmined}`
 **Verify:** `node --test scripts/grade.test.mjs`
 
-Run on the maintainer's `COSTS.md` on 2026-11-26, `field` read:
-executing-critique 75 findings and 4 escapes (0.95), clearing-review 79
+An escape takes the repo tag of the review lines its step names by date,
+when they share one; else the one tag its own text names as a word; else
+`?`. With no `COSTS.md`, `field` reads `ESCAPES.md` and reports the
+escapes alone, with no recall. `perturb` takes a branch as a remote's copy
+too (`origin/showcase/...`) and matches pull requests by the branch's own
+name. Run on the maintainer's `COSTS.md` on 2026-11-26 (after the grading
+plan's first executing critique was logged), `field` read:
+executing-critique 90 findings and 4 escapes (0.96), clearing-review 79
 and 0 (1.00), task-review 221 and 0 (1.00), reading-critique 82 and 1
-(0.99), with 54 review lines and 3 escapes listed as unread. The
-clearing review's 1.00 sits beside PR 13's replayed round 1 at 3 of 12:
-a round that misses what the next round finds is not logged as an
-escape, so field recall is a ceiling, read beside the fixtures, never
-alone.
+(0.99), with 54 review lines and 3 escapes listed as unread; by tag, 3 of
+the 4 executing-critique escapes fall to `kymograph`, and the other two
+escapes to `?`. The clearing review's 1.00 sits beside PR 13's replayed
+round 1 at 3 of 12: a round that misses what the next round finds is not
+logged as an escape, so field recall is a ceiling, read beside the
+fixtures, never alone.
 
 - [ ] Write the failing tests at the named seams. Append to `scripts/grade.test.mjs`:
 
 ```js
 // ---- T7: field recall and perturb
 
-test('fieldRecall: findings per step without nits, escapes by step words, unreadable lines listed', () => {
+test('fieldRecall: findings per step and per repo tag without nits, escapes by step words, date and name, unreadable lines listed', () => {
   const costs = [
     '# Agent costs', '',
-    '- [p] 2030-01-02, clearing review (PR 1), 1,000 tokens. NOT CLEARED: 1 blocker, 2 major, 3 minor, 9 nit.', '',
-    '- [p] 2030-01-03, clearing review round 2 (PR 1), CLEARED: 0 blocker, 0 major, 1 minor.', '',
-    '- [q] 2030-01-03, executing critique pass 1, found things', '',
-    '- [q] 2030-01-03, build implementer T1, 5 major mentioned but not a review', '',
+    '- [alpha] 2030-01-02, clearing review (PR 1), 1,000 tokens. NOT CLEARED: 1 blocker, 2 major, 3 minor, 9 nit.', '',
+    '- [alpha] 2030-01-03, clearing review round 2 (PR 1), CLEARED: 0 blocker, 0 major, 1 minor.', '',
+    '- [beta] 2030-01-03, clearing review (PR 9), CLEARED: 0 blocker, 2 major, 0 minor.', '',
+    '- [beta] 2030-01-03, executing critique pass 1, found things', '',
+    '- [beta] 2030-01-03, build implementer T1, 5 major mentioned but not a review', '',
     '## Escapes', '', 'Header text.', '',
+    '- 2030-01-02; an early defect; step: the 2030-01-02 clearing review; a miss.',
     '- 2030-01-04; a defect; found by x; step:\n  the 2030-01-02 clearing review; a miss.',
-    '- 2030-01-05; another; step: fold 1; contract gap.', '',
+    '- 2030-01-05; another; step: fold 1; contract gap.',
+    '- 2030-01-05; a third; step: the 2030-01-03 clearing review, which two repos ran that day; a miss.',
+    '- 2030-01-05; a fourth, in beta-notes and beta; step: the clearing review of PR 9; a miss.', '',
     '## Stuck', '', '- 2030-01-06; step: clearing review; not an escape',
   ].join('\n');
   const r = G.fieldRecall(costs);
-  assert.deepEqual(r.steps, { 'clearing-review': { findings: 7, escapes: 1, recall: 7 / 8 } });
-  assert.deepEqual(r.unread, ['[q] 2030-01-03, executing critique pass 1', 'escape 2030-01-05, step: fold 1']);
-  assert.deepEqual(G.fieldRecall(costs, '2030-01-03').steps['clearing-review'], { findings: 1, escapes: 1, recall: 0.5 });
+  assert.deepEqual(r.steps, { 'clearing-review': { findings: 9, escapes: 4, recall: 9 / 13 } });
+  assert.deepEqual(r.tags, {
+    alpha: { 'clearing-review': { findings: 7, escapes: 2, recall: 7 / 9 } },
+    beta: { 'clearing-review': { findings: 2, escapes: 1, recall: 2 / 3 } },
+    '?': { 'clearing-review': { findings: 0, escapes: 1, recall: 0 } },
+  });
+  assert.deepEqual(r.unread, ['[beta] 2030-01-03, executing critique pass 1', 'escape 2030-01-05, step: fold 1']);
+  assert.deepEqual(G.fieldRecall(costs, '2030-01-03').steps['clearing-review'], { findings: 3, escapes: 3, recall: 0.5 });
 });
 
 test('perturbRow: section 5 rows against PRs naming the branch', () => {
@@ -1972,21 +2330,42 @@ test('perturbRow: section 5 rows against PRs naming the branch', () => {
   assert.deepEqual(G.perturbRow(report, prs, 'showcase/s'), { branch: 'showcase/s', pieces: 3, merged: 1, closed: 1, open: 0, unmined: 1 });
 });
 
-test('field CLI: reads COSTS.md, or ESCAPES.md where there is no COSTS.md', (t) => {
+test('perturb CLI: a remote\'s copy of the branch is matched by the branch\'s own name', (t) => {
+  const h = tmp(t);
+  const dir = tmp(t);
+  gitIn(dir, 'init', '-q');
+  put(dir, 'PERTURB-REPORT.md', '# R\n\n## 5. Mineable pieces\n\n| Piece | Cost |\n|---|---|\n| a | 1 |\n| b | 2 |\n');
+  gitIn(dir, 'add', '-A'); gitIn(dir, 'commit', '-qm', 'report');
+  gitIn(dir, 'remote', 'add', 'origin', 'https://example.invalid/r.git');
+  gitIn(dir, 'update-ref', 'refs/remotes/origin/showcase/s', 'HEAD');
+  const prs = put(h, 'prs.json', JSON.stringify([{ number: 1, state: 'MERGED', body: 'mined from showcase/s' }]));
+  const r = cli(h, 'perturb', 'origin/showcase/s', '--repo', dir, '--prs', prs);
+  assert.equal(r.status, 0, r.stderr);
+  const [row] = G.readRows(h);
+  assert.deepEqual([row.branch, row.merged], ['showcase/s', 1]);
+});
+
+test('field CLI: reads COSTS.md, per step and per tag; with only ESCAPES.md, the escapes alone and no recall', (t) => {
   const h = tmp(t);
   put(h, 'ESCAPES.md', '# Escapes\n\n## Escapes\n\n- 2030-01-04; a defect; step: the 2030-01-02 clearing review; a miss.\n');
-  assert.match(cli(h, 'field').stdout, /clearing-review: 0 findings, 1 escapes, recall 0\.00/);
+  const alone = cli(h, 'field').stdout;
+  assert.match(alone, /^clearing-review: 1 escapes$/m);
+  assert.doesNotMatch(alone, /recall/);
+  assert.equal(G.readRows(h)[0].steps['clearing-review'].recall, null);
   put(h, 'COSTS.md', '# Agent costs\n\n- [p] 2030-01-02, clearing review, 1 major.\n\n## Escapes\n\n');
-  assert.match(cli(h, 'field').stdout, /clearing-review: 1 findings, 0 escapes, recall 1\.00/);
+  const both = cli(h, 'field').stdout;
+  assert.match(both, /^clearing-review: 1 findings, 0 escapes, recall 1\.00$/m);
+  assert.match(both, /^ {2}\[p\] clearing-review: 1 findings, 0 escapes, recall 1\.00$/m);
 });
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 3 failing of 22 (2 skipped: the oracle is not beside the script), these:
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 4 failing of 27, these:
 
 ```
-✖ fieldRecall: findings per step without nits, escapes by step words, unreadable lines listed
+✖ fieldRecall: findings per step and per repo tag without nits, escapes by step words, date and name, unreadable lines listed
 ✖ perturbRow: section 5 rows against PRs naming the branch
-✖ field CLI: reads COSTS.md, or ESCAPES.md where there is no COSTS.md
+✖ perturb CLI: a remote's copy of the branch is matched by the branch's own name
+✖ field CLI: reads COSTS.md, per step and per tag; with only ESCAPES.md, the escapes alone and no recall
 ```
 
   with errors such as
@@ -1994,7 +2373,8 @@ test('field CLI: reads COSTS.md, or ESCAPES.md where there is no COSTS.md', (t) 
 ```
 TypeError: G.fieldRecall is not a function
 TypeError: G.perturbRow is not a function
-AssertionError [ERR_ASSERTION]: The input did not match the regular expression /clearing-review: 0 findings, 1 escapes, recall 0\.00/. Input:
+AssertionError [ERR_ASSERTION]: grade: usage:
+AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^clearing-review: 1 escapes$/m. Input:
 ```
 
 - [ ] In `scripts/grade.mjs`, insert immediately before the line `// ---- command line`:
@@ -2013,21 +2393,32 @@ export function stepOf(words) {
   return null;
 }
 // From COSTS.md: findings each review line names (blocker, major and minor; nits left out) beside the Escapes
-// lines naming that step. A review line with no counts it can read is listed, not guessed.
+// lines naming that step, per step and per repo tag (the "[tag]" a review line starts with). An escape takes the
+// tag of the review lines its step names by date, when they share one; else the one tag, of those or of all, that
+// its own text names as a word; else "?". A review line with no counts it can read is listed, not guessed.
 export function fieldRecall(costs, since = '0000-00-00') {
   const [agents, escapes = ''] = costs.split(/^## Escapes\s*$/m);
   const bullets = (text) => text.split(/\n(?=- )/).filter((b) => b.startsWith('- '));
   const steps = {};
+  const tags = {};
   const unread = [];
-  const at = (s) => (steps[s] ??= { findings: 0, escapes: 0, recall: null });
+  const tagsOf = new Map();
+  const known = new Set();
+  const cell = (o, step) => (o[step] ??= { findings: 0, escapes: 0, recall: null });
+  const add = (tag, step, what, n) => { cell(steps, step)[what] += n; cell(tags[tag] ??= {}, step)[what] += n; };
   for (const b of bullets(agents)) {
     const m = /^- \[([^\]]+)\] (\d{4}-\d{2}-\d{2}), ([^(,]*)/.exec(b);
-    if (!m || m[2] < since) continue;
+    if (!m) continue;
+    known.add(m[1]);
     const step = stepOf(m[3]);
     if (!step) continue;
+    const k = `${m[2]} ${step}`;
+    if (!tagsOf.has(k)) tagsOf.set(k, new Set());
+    tagsOf.get(k).add(m[1]);
+    if (m[2] < since) continue;
     const n = (word) => [...b.matchAll(new RegExp(`(\\d+) ${word}s?\\b`, 'g'))].reduce((a, x) => a + Number(x[1]), 0);
     if (!/\d+ (blocker|major|minor)s?\b/.test(b)) { unread.push(`[${m[1]}] ${m[2]}, ${m[3].replace(/\s+/g, ' ').trim()}`); continue; }
-    at(step).findings += n('blocker') + n('major') + n('minor');
+    add(m[1], step, 'findings', n('blocker') + n('major') + n('minor'));
   }
   for (const b of bullets(escapes.split(/^## /m)[0])) {
     const date = /^- (\d{4}-\d{2}-\d{2})/.exec(b)?.[1];
@@ -2035,10 +2426,14 @@ export function fieldRecall(costs, since = '0000-00-00') {
     const words = (/step:\s*([^;]*)/.exec(b)?.[1] ?? '').replace(/\s+/g, ' ').trim();
     const step = stepOf(words);
     if (!step) { unread.push(`escape ${date}, step: ${words || '(none named)'}`); continue; }
-    at(step).escapes++;
+    const dated = tagsOf.get(`${/\d{4}-\d{2}-\d{2}/.exec(words)?.[0]} ${step}`);
+    const named = [...(dated ?? known)].filter((t) => new RegExp(`(^|[^\\w-])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\w-]|$)`, 'i').test(b));
+    add(dated?.size === 1 ? [...dated][0] : named.length === 1 ? named[0] : '?', step, 'escapes', 1);
   }
-  for (const v of Object.values(steps)) v.recall = v.findings + v.escapes ? v.findings / (v.findings + v.escapes) : null;
-  return { steps, unread };
+  for (const v of [...Object.values(steps), ...Object.values(tags).flatMap((t) => Object.values(t))]) {
+    v.recall = v.findings + v.escapes ? v.findings / (v.findings + v.escapes) : null;
+  }
+  return { steps, tags, unread };
 }
 
 // ---- perturb
@@ -2061,12 +2456,17 @@ export function perturbRow(report, prs, branch) {
 ```js
   field(argv) {
     const { pos, opt } = parseArgs(argv, { since: 1 });
-    // An adopter with no costs log keeps escapes alone in ESCAPES.md (setup writes it); field reads that instead.
+    // An adopter with no costs log keeps escapes alone in ESCAPES.md (setup writes it); field reads that instead
+    // and reports the escapes alone, since it holds no findings to set them against.
     const costs = path.join(home(), 'COSTS.md');
-    const r = fieldRecall(read(pos[0] ?? (fs.existsSync(costs) ? costs : path.join(home(), 'ESCAPES.md'))), opt.since);
-    for (const [k, v] of Object.entries(r.steps)) console.log(`${k}: ${v.findings} findings, ${v.escapes} escapes, recall ${v.recall === null ? '-' : v.recall.toFixed(2)}`);
+    const alone = !pos[0] && !fs.existsSync(costs);
+    const r = fieldRecall(read(pos[0] ?? (alone ? path.join(home(), 'ESCAPES.md') : costs)), opt.since);
+    if (alone) for (const v of [...Object.values(r.steps), ...Object.values(r.tags).flatMap((t) => Object.values(t))]) v.recall = null;
+    const line = (v) => (alone ? `${v.escapes} escapes` : `${v.findings} findings, ${v.escapes} escapes, recall ${v.recall === null ? '-' : v.recall.toFixed(2)}`);
+    for (const [k, v] of Object.entries(r.steps)) console.log(`${k}: ${line(v)}`);
+    for (const [tag, s] of Object.entries(r.tags)) for (const [k, v] of Object.entries(s)) console.log(`  [${tag}] ${k}: ${line(v)}`);
     for (const u of r.unread) console.log(`unread: ${u}`);
-    appendRow({ kind: 'field', since: opt.since ?? null, ...r });
+    appendRow({ kind: 'field', since: opt.since ?? null, escapes_alone: alone, ...r });
     return 0;
   },
   perturb(argv) {
@@ -2075,9 +2475,11 @@ export function perturbRow(report, prs, branch) {
     const repo = opt.repo ?? '.';
     let report;
     try { report = git(repo, 'show', `${pos[0]}:PERTURB-REPORT.md`); } catch { throw new GradeError(`no PERTURB-REPORT.md on ${pos[0]}`); }
-    const prs = opt.prs ? JSON.parse(read(opt.prs))
-      : JSON.parse(execFileSync('gh', ['pr', 'list', '--state', 'all', '--search', `${pos[0]} in:body`, '--json', 'number,state,body', '--limit', '200'], { cwd: repo, encoding: 'utf8' }));
-    const row = appendRow({ kind: 'perturb', ...perturbRow(report, prs, pos[0]) });
+    // Pull request bodies name the branch, never a remote's copy of it (origin/showcase/...).
+    const branch = git(repo, 'remote').split('\n').filter(Boolean).reduce((b, r) => (b.startsWith(`${r}/`) ? b.slice(r.length + 1) : b), pos[0]);
+    const prs = opt.prs ? readJson(opt.prs)
+      : JSON.parse(execFileSync('gh', ['pr', 'list', '--state', 'all', '--search', `${branch} in:body`, '--json', 'number,state,body', '--limit', '200'], { cwd: repo, encoding: 'utf8' }));
+    const row = appendRow({ kind: 'perturb', ...perturbRow(report, prs, branch) });
     console.log(JSON.stringify(row));
     return 0;
   },
@@ -2090,14 +2492,20 @@ export function perturbRow(report, prs, branch) {
   grade.mjs perturb <showcase branch> [--repo <dir>] [--prs <gh JSON file>]
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 20 pass, 0 fail, 2 skipped, of 22 (the skips name the missing oracle).
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 27 pass, 0 fail, 0 skipped, of 27.
 
 - [ ] Mutant runs, one at a time on the full suite with `scripts/guard-oracle.mjs` present, restored after each, under a timeout of 300 s. Each must fail the tests named:
 
-  - **nits are counted**: in `scripts/grade.mjs` replace `at(step).findings += n('blocker') + n('major') + n('minor');` with `at(step).findings += n('blocker') + n('major') + n('minor') + n('nit');`; fails: "fieldRecall: findings per step without nits, escapes by step words, unreadable lines listed".
-  - **an escape with no step is dropped**: in `scripts/grade.mjs` replace `if (!step) { unread.push(\`escape ${date}, step: ${words || '(none named)'}\`); continue; }` with `if (!step) continue;`; fails: "fieldRecall: findings per step without nits, escapes by step words, unreadable lines listed".
+  - **nits are counted**: in `scripts/grade.mjs` replace `add(m[1], step, 'findings', n('blocker') + n('major') + n('minor'));` with `add(m[1], step, 'findings', n('blocker') + n('major') + n('minor') + n('nit'));`; fails: "fieldRecall: findings per step and per repo tag without nits, escapes by step words, date and name, unreadable lines listed".
+  - **escapes ignore since**: in `scripts/grade.mjs` replace `if (!date || date < since) continue;` with `if (!date) continue;`; fails: "fieldRecall: findings per step and per repo tag without nits, escapes by step words, date and name, unreadable lines listed".
+  - **an escape with no step is dropped**: in `scripts/grade.mjs` replace `` if (!step) { unread.push(`escape ${date}, step: ${words || '(none named)'}`); continue; } `` with `if (!step) continue;`; fails: "fieldRecall: findings per step and per repo tag without nits, escapes by step words, date and name, unreadable lines listed".
+  - **an escape never takes its review's tag**: in `scripts/grade.mjs` replace `dated?.size === 1 ? [...dated][0] :` with (nothing); fails: "fieldRecall: findings per step and per repo tag without nits, escapes by step words, date and name, unreadable lines listed".
+  - **an escape's text never names its tag**: in `scripts/grade.mjs` replace `named.length === 1 ? named[0] : '?'` with `'?'`; fails: "fieldRecall: findings per step and per repo tag without nits, escapes by step words, date and name, unreadable lines listed".
   - **the table header row is a piece**: in `scripts/grade.mjs` replace `.filter((l) => /^\|/.test(l) && !/^\|\s*-/.test(l)).slice(1);` with `.filter((l) => /^\|/.test(l) && !/^\|\s*-/.test(l));`; fails: "perturbRow: section 5 rows against PRs naming the branch".
-  - **no ESCAPES.md fallback**: in `scripts/grade.mjs` replace `(fs.existsSync(costs) ? costs : path.join(home(), 'ESCAPES.md'))` with `costs`; fails: "field CLI: reads COSTS.md, or ESCAPES.md where there is no COSTS.md".
+  - **perturb keeps the remote's name**: in `scripts/grade.mjs` replace `` const branch = git(repo, 'remote').split('\n').filter(Boolean).reduce((b, r) => (b.startsWith(`${r}/`) ? b.slice(r.length + 1) : b), pos[0]); `` with `const branch = pos[0];`; fails: "perturb CLI: a remote's copy of the branch is matched by the branch's own name".
+  - **no ESCAPES.md fallback**: in `scripts/grade.mjs` replace `read(pos[0] ?? (alone ? path.join(home(), 'ESCAPES.md') : costs))` with `read(pos[0] ?? costs)`; fails: "field CLI: reads COSTS.md, per step and per tag; with only ESCAPES.md, the escapes alone and no recall".
+  - **escapes alone print a recall**: in `scripts/grade.mjs` replace `const line = (v) => (alone ?` with `const line = (v) => (false ?`; fails: "field CLI: reads COSTS.md, per step and per tag; with only ESCAPES.md, the escapes alone and no recall".
+  - **escapes alone store a recall**: in `scripts/grade.mjs` replace `if (alone) for (const v of [...Object.values(r.steps), ...Object.values(r.tags).flatMap((t) => Object.values(t))]) v.recall = null;` with (nothing); fails: "field CLI: reads COSTS.md, per step and per tag; with only ESCAPES.md, the escapes alone and no recall".
 
 - [ ] Commit: "Grade: field recall from the escapes log, perturb rows";
   the body gives the ceiling caveat above.
@@ -2107,16 +2515,20 @@ export function perturbRow(report, prs, branch) {
 **Depends on:** T7
 **Files:** create `commands/grade.md`; test `scripts/grade.test.mjs`
 **Seams:** `commands/grade.md` as read by its test (every `grade.mjs`
-subcommand and option it names exists)
+subcommand and option it names exists, each option matched exactly)
 **Interfaces:** consumes every subcommand above
 **Verify:** `node --test scripts/grade.test.mjs`
+
+The checkout in step 1.2 was run on this repository at 1abb851: without
+the reflog expiry and `gc`, all 74 commits past `head` stayed readable
+through the reflog; with them, none (measured with the step's own check).
 
 - [ ] Write the failing tests at the named seams. Append to `scripts/grade.test.mjs`:
 
 ```js
 // ---- T8: the runner
 
-test('commands/grade.md names only subcommands and options grade.mjs accepts', () => {
+test('commands/grade.md names only subcommands and options grade.mjs accepts, each option exactly', () => {
   const md = fs.readFileSync(fileURLToPath(new URL('../commands/grade.md', import.meta.url)), 'utf8');
   const usage = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' }).stderr;
   const subs = new Set([...usage.matchAll(/grade\.mjs (\w+)/g)].map((m) => m[1]));
@@ -2125,18 +2537,19 @@ test('commands/grade.md names only subcommands and options grade.mjs accepts', (
     for (const m of line.matchAll(/grade\.mjs (\w+)([^`]*)/g)) {
       named.add(m[1]);
       assert.ok(subs.has(m[1]), `grade.md names grade.mjs ${m[1]}`);
-      const allowed = usage.split('\n').filter((u, i, all) => u.includes(`grade.mjs ${m[1]}`) || (/^\s{10,}/.test(u) && all[i - 1]?.includes(`grade.mjs ${m[1]}`))).join(' ');
-      for (const [opt] of m[2].matchAll(/--[a-z-]+/g)) assert.ok(allowed.includes(opt), `grade.md gives ${m[1]} ${opt}`);
+      const lines = usage.split('\n').filter((u, i, all) => u.includes(`grade.mjs ${m[1]}`) || (/^\s{10,}/.test(u) && all[i - 1]?.includes(`grade.mjs ${m[1]}`)));
+      const allowed = new Set(lines.join(' ').match(/--[a-z-]+/g));
+      for (const [opt] of m[2].matchAll(/--[a-z-]+/g)) assert.ok(allowed.has(opt), `grade.md gives ${m[1]} ${opt}`);
     }
   }
   assert.deepEqual([...named].sort(), ['cite', 'field', 'handoff', 'leaks', 'reasks', 'score', 'table']);
 });
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 1 failing of 23 (2 skipped: the oracle is not beside the script), these:
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 1 failing of 28, these:
 
 ```
-✖ commands/grade.md names only subcommands and options grade.mjs accepts
+✖ commands/grade.md names only subcommands and options grade.mjs accepts, each option exactly
 ```
 
   with errors such as
@@ -2158,10 +2571,14 @@ You are grading the owner's config against ground truth someone can check. The
 script decides every number; you run the step under test, the checks, and
 the adjudicator. Arguments: $ARGUMENTS
 
-Fixtures live in `~/.claude/grading/fixtures/<id>/fixture.json`. A fixture is
-a repository at a commit (`head`) with a key: the faults known to be there.
-Never show the step under test the key, the fixture file, or anything after
-`head`.
+A fixture is a repository at a commit (`head`) with a key: the faults known
+to be there. Shipped fixtures live in `~/.claude/grading/fixtures/<id>/`
+(setup replaces them on update); minted fixtures, and the copy the script
+writes when a run grows a fixture's key, live in
+`~/.claude/grading/local/<id>/`. A fixture's file is
+`local/<id>/fixture.json` where that exists, else
+`fixtures/<id>/fixture.json`. Never show the step under test the key, the
+fixture file, or anything after `head`.
 
 ## 1. A fixture run: `<fixture id> [runs] [--without <file>#<ID>]`
 
@@ -2169,13 +2586,19 @@ Never show the step under test the key, the fixture file, or anything after
    passed its self-check. If a `--without` example is in its `held_out`
    list, stop: that arm would measure leakage, not help (the script refuses
    it too).
-2. Check out the fixture for each run: `git clone --no-local <repo> <scratch>/<id>-<n>`
-   (a URL or a local path), then in it `git checkout --detach <head>`,
-   `git remote remove origin`, and delete every branch and tag
+2. Check out the fixture for each run, so nothing past `head` can be read.
+   First write the commits that are not `head` or before it to
+   `<scratch>/<id>-later.txt` from a full clone:
+   `git -C <source> rev-list --all ^<head>`. Then
+   `git clone --no-local <repo> <scratch>/<id>-<n>` (a URL or a local path),
+   and in it `git checkout --detach <head>`, `git remote remove origin`,
+   delete every branch and tag
    (`git for-each-ref --format='%(refname)' refs/heads refs/tags | xargs -n1 git update-ref -d`),
-   so nothing past `head` can be read. Write the commits that are not
-   `head` or before it to `<scratch>/<id>-later.txt` from a full clone
-   first: `git -C <source> rev-list --all ^<head>`.
+   and drop the reflog and every object no ref reaches (the reflog still
+   names the clone's tip):
+   `git reflog expire --expire=now --all && git gc -q --prune=now`. Check
+   it: `while read -r c; do git cat-file -e "$c" 2>/dev/null && echo "$c"; done < <scratch>/<id>-later.txt`
+   must print nothing; if it prints a commit, stop.
 3. Build the brief from the step's current text: for `clearing-review`, the
    clearing-review section of `~/.claude/skills/build/SKILL.md` and
    `clearing-review-examples.md` beside it; for `reading-critique`, the
@@ -2193,16 +2616,20 @@ Never show the step under test the key, the fixture file, or anything after
    clearing review: 66k to 326k tokens, median 149k, on 27 runs to
    2026-11-13), or "not yet measured"; ask run, lighter or skip.
 5. Spawn one fresh subagent per run with the brief. Save each report to
-   `<scratch>/<id>-<n>.md` and its transcript (the subagent's JSONL under
-   `~/.claude/projects/`) to `<scratch>/<id>-<n>.jsonl`.
-6. For each run: `node ~/.claude/scripts/grade.mjs leaks <scratch>/<id>-<n>.jsonl <fixture.json> --later <scratch>/<id>-later.txt --examples-root ~/.claude/skills`.
+   `<scratch>/<id>-<n>.md` and its transcript to `<scratch>/<id>-<n>.jsonl`:
+   the newest `.jsonl` in
+   `~/.claude/projects/<project>/<this session's id>/subagents/` once it
+   returns.
+6. For each run: `node ~/.claude/scripts/grade.mjs leaks <scratch>/<id>-<n>.jsonl <fixture.json> --later <scratch>/<id>-later.txt --examples-root ~/.claude`.
    Exit 1 means a leak: keep the run, and pass the count as
    `--leak-flags <n>` below.
 7. Score: `node ~/.claude/scripts/grade.mjs score <fixture.json> <scratch>/<id>-<n>.md --model <model> --tokens <n> --run <id>-<n> [--without ...] [--leak-flags <n>]`,
    and for a fixture whose key carries a guard probe add
    `--checkout <scratch>/<id>-<n> --oracle ~/.claude/scripts/guard-oracle.mjs`:
-   the script then runs each unmatched blocker or major finding's commands
-   in real bash and asks the guard at `head`.
+   the script then runs the commands of each unmatched blocker or major
+   finding that says the guard lets harm through in real bash, and asks the
+   guard as committed at `head`. Every other unmatched finding is left for
+   step 8.
 8. Adjudicate what is left. The row's `severe_unmatched` lists every
    unmatched blocker or major finding; those not yet settled are its
    `unadjudicated` count. If it is above zero, spawn one fresh adjudicator
@@ -2211,9 +2638,11 @@ Never show the step under test the key, the fixture file, or anything after
    and run it. Reproduced: it failed as the finding says. Not reproduced:
    it tried and could not. It writes `[{"text": "<the finding, verbatim>", "verdict": "reproduced" | "not-reproduced", "class": "<short name>", "locator": {"file": "<path>", "lines": [a, b]}}]`
    to `<scratch>/<id>-<n>.verdicts.json`. Score again with
-   `--verdicts <that file>`: a reproduced finding joins the fixture's key on
-   its own, recorded in its `history`. Use the same `--run` name both times:
-   the table counts a run once, as its last row.
+   `--verdicts <that file>` and the same `--run` name: the table counts a
+   run once, as its last row, and the script keeps what the run's last row
+   settled (the guard's verdicts among them) and leaves out the key entries
+   the run itself grew. A reproduced finding joins the key on its own,
+   recorded in its `history`, in the copy under `~/.claude/grading/local/`.
 9. Log every agent's tokens to `~/.claude/COSTS.md` as usual, naming the
    fixture and `head`.
 
@@ -2240,11 +2669,16 @@ Show the table, the uncited examples (retirement candidates for
 `/reflect`, never retired here), and field recall's unread lines.
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 21 pass, 0 fail, 2 skipped, of 23 (the skips name the missing oracle).
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 28 pass, 0 fail, 0 skipped, of 28.
+
+- [ ] Mutant runs, one at a time on the full suite with `scripts/guard-oracle.mjs` present, restored after each, under a timeout of 300 s. Each must fail the tests named:
+
+  - **the usage misspells an option**: in `scripts/grade.mjs` replace `[--leak-flags <n>]` with `[--leak-flagsx <n>]`; fails: "commands/grade.md names only subcommands and options grade.mjs accepts, each option exactly".
 
 - [ ] Commit: "Grade: the /grade command"; the body says the brief is
   built from the current skill text minus held-out examples, so the
-  current config is graded on old heads.
+  current config is graded on old heads, and that the checkout drops its
+  reflog so nothing past `head` can be read.
 
 ### T9: setup and docs
 
@@ -2358,9 +2792,8 @@ with
 ```md
   `node --test ~/.claude/scripts/ledger.test.mjs` and
   `node --test ~/.claude/scripts/grade.test.mjs`; every test must pass (the
-  grader's two probe tests skip, by name, where `guard-oracle.mjs` is
-  absent). Without Node the ledger script and the grader are unavailable;
-  say so.
+  grader's probe tests run real bash through `guard-oracle.mjs`). Without
+  Node the ledger script and the grader are unavailable; say so.
 ```
 
 - [ ] In `.claude/skills/setup-config/SKILL.md`, replace
@@ -2443,7 +2876,7 @@ with
 `grading/` (the grader's fixtures) are copied into `~/.claude` by setup;
 ```
 
-- [ ] Run `node --test scripts/grade.test.mjs`; expected: 21 pass, 0 fail, 2 skipped, of 23 (the skips name the missing oracle).
+- [ ] Run `node --test scripts/grade.test.mjs`; expected: 28 pass, 0 fail, 0 skipped, of 28.
 
 - [ ] Run the full verify (header); every suite green.
 - [ ] Commit: "Setup: install and test the grader; docs name /grade".
@@ -2454,7 +2887,7 @@ with
 2. Mint the private critique fixtures from the escapes already logged
    (the 2026-10-10 reading critique, the 2026-10-29 executing-critique
    passes, kymograph PR 7's two of 2026-11-15) with `mint`, on the
-   maintainer's machine; they stay in `~/.claude/grading/fixtures/` and
+   maintainer's machine; they land in `~/.claude/grading/local/` and
    never enter this repository. The 2026-11-21 fold escapes mint nothing
    (folds are not a graded step).
 3. The first term run: `/grade term`, then `/grade pr13-round1 3`,
@@ -2467,33 +2900,64 @@ with
 ## Choices for the owner's review
 
 Calls the spec left open, made while building the plan (Claude's lane:
-internals no student sees):
+internals no student sees). The owner has ruled on four critique findings
+already (the leak check drops the repository's name; `--from-history`
+reads every commit and counts a fix only against a different, earlier
+pull request; a history fixture with no test probe stays a draft; the
+`Re-asked:` sentence goes into spec-first, critique and `/reflect`);
+those are built as ruled and are not listed here.
 
 1. A locator with lines `[0, 0]` names the whole file; the PR 13 entries
    use it, since the guard's faults are not one line range.
 2. A key holds the faults the real rounds rated blocker or major, plus
    the oracle-shown classes; minors are counted, not keyed.
 3. A finding under a heading that starts "Notes" is not a finding;
-   `/grade`'s brief puts non-findings there.
-4. A fixture row carries `run` and `unadjudicated` (beyond the spec's
-   list): `run` so a run scored again with verdicts counts once in the
-   table, `unadjudicated` so an unsettled finding is neither a hit nor a
-   false alarm.
+   `/grade`'s brief puts non-findings there and asks for severity labels
+   (ruled by the owner: kept, in the brief only).
+4. A fixture row carries `run`, `unadjudicated` and `settled` (beyond the
+   spec's list): `run` so a run scored again counts once in the table,
+   `unadjudicated` so an unsettled finding is neither a hit nor a false
+   alarm, `settled` so a rescore keeps the guard's verdicts and the row
+   names who settled each finding.
 5. A new `probes` subcommand re-proves a shipped guard fixture's key at
    its head, so the fixture's probe fields have a reader and an adopter
    can check them.
-6. `--from-history`'s regex is the fix subject's two longest words, both
-   required, in either order.
+6. `--from-history`'s regex is the fix subject's two longest words but
+   stop words, both required, in either order.
 7. An adopter with no `COSTS.md` gets `ESCAPES.md` from setup; `/reflect`
-   logs there and `field` reads it.
+   logs there and `field` reads it, reporting escapes alone.
 8. A grown key entry's regex is the finding's longest backticked span, or
    its first eight words.
+9. Where fixtures live (the spec put minted ones in
+   `~/.claude/grading/fixtures/`): shipped fixtures stay there,
+   setup-owned and replaced on update; minted fixtures and any grown copy
+   of a shipped one go to `~/.claude/grading/local/`, which `/grade` reads
+   first, so an update never overwrites a grown key and the installed
+   suite tests only what ships. Cost if wrong: a grown copy hides a later
+   upstream fix to its shipped fixture until the copy is deleted.
+10. Under `--from-history`, every first-parent commit that is not a merge
+    counts as its own pull request, a direct commit as well as a squash
+    merge (git cannot tell them apart). Cost if wrong: a repository that
+    commits straight to main mints fixtures for single commits.
+11. A rescore with the same `--run` reads that run's last row in
+    `grades.jsonl` for the verdicts already settled, and leaves out the
+    key entries the run grew. Cost if wrong: a run renamed between the
+    two scorings is scored as two runs.
+12. The guard probe takes only findings that claim harm let through, by
+    vocabulary; any other unmatched severe finding goes to the
+    adjudicator. Cost if wrong: a harm finding worded without those words
+    costs an adjudicator's tokens, never a false alarm.
+13. Field recall by repo tag: an escape takes the tag of the review lines
+    its step names by date, else the one tag its text names, else `?`.
+    Cost if wrong: escapes sit under `?` and per-tag recall reads high.
+14. `selfCheck` names every problem a fixture has (a missing `head` alone
+    stops it), so a draft's `self_check` lists all there is to fix.
 
 ## Overnight readiness
 
-Every task names its seams and its verify command. Two things are not
-settled by the plan alone: the subagent premise (preflight 3), which may
-change T8's step 3, and the oracle (pull request 16), without which T2
-and T3's oracle tests skip and T3's by-hand check cannot run. Attended
-`/build` can start now; overnight once both are settled. The plan is not
-ready for either until its executing critique comes back clean.
+Every task names its seams and its verify command. One thing is not
+settled by the plan alone: the subagent premise (preflight 2), which may
+change T8's step 3. The oracle is on main, so no test skips and T3's
+by-hand check can run. Attended `/build` can start now; overnight once
+the premise is settled. The plan is not ready for either until an
+executing critique comes back clean.
