@@ -698,3 +698,38 @@ test('4.4: a void drops its target and counts as nothing: no run, escape, row, t
     'escapes with no linked run: 0',
   ].join('\n'), skipped: 0 });
 });
+
+test('4.3: a supersedes that check reports drops nothing, and its target can still be corrected', (t) => {
+  const dir = folder(t);
+  const a = C.add(at(dir), RUN);
+  const e = C.add(at(dir), { ...ESCAPE, run: a });
+  fs.appendFileSync(at(dir), `${JSON.stringify(record({ id: '2030-01-02-beef', date: '2030-01-02', supersedes: e }))}\n`);
+  assert.deepEqual(C.check(at(dir)).problems, [`line 3: supersedes: ${e} is an escape record`]);
+  assert.match(C.table(at(dir)).out, /, 1 escape\n/);
+  // The rejected link supersedes nothing, so the escape it names can still be corrected.
+  C.add(at(dir), { ...ESCAPE, run: a, note: 'corrected', supersedes: e });
+  C.add(at(dir), { ...RUN, supersedes: '2030-01-02-beef' });
+  assert.deepEqual(C.check(at(dir)).problems, []);
+  assert.match(C.table(at(dir)).out, /, 1 escape\n/);
+});
+
+test('4.3, 4.4, 6.2: a line naming a void supersedes nothing, so check still reports the void\'s own problems', (t) => {
+  const dir = folder(t);
+  for (const later of [voided({ id: '2030-01-01-0f10', supersedes: '2030-01-01-0f0f' }), record({ id: '2030-01-01-0b0b', supersedes: '2030-01-01-0f0f' })]) {
+    fs.writeFileSync(at(dir), '');
+    for (const r of [record(), voided({ supersedes: '2030-01-01-ffff' }), later]) fs.appendFileSync(at(dir), `${JSON.stringify(r)}\n`);
+    const problems = C.check(at(dir)).problems;
+    assert.deepEqual(problems.filter((p) => p.startsWith('line 2: ')), ['line 2: supersedes: no earlier record 2030-01-01-ffff', `line 2: ${VOID_HAND}`]);
+    assert.ok(problems.includes('line 3: supersedes: 2030-01-01-0f0f is a void record, and a void is never superseded: record the run or escape again'));
+  }
+});
+
+test('4.3: a void or a run naming a later line drops nothing; similar and table still count the later run', (t) => {
+  const dir = folder(t);
+  for (const r of [voided({ supersedes: '2030-01-01-0a0a' }), record(), record({ id: '2030-01-01-0b0b', supersedes: '2030-01-01-0c0c' }),
+    record({ id: '2030-01-01-0c0c' })]) fs.appendFileSync(at(dir), `${JSON.stringify(r)}\n`);
+  assert.deepEqual(C.check(at(dir)).problems, ['line 1: supersedes: no earlier record 2030-01-01-0a0a', `line 1: ${VOID_HAND}`,
+    'line 3: supersedes: no earlier record 2030-01-01-0c0c']);
+  assert.match(C.similar(at(dir), 'implement').out, /^implement: 3 fresh runs, /);
+  assert.match(C.table(at(dir)).out, /total: 3 runs, /);
+});
