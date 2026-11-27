@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export class CostsError extends Error {}
 
-// ==== T1: records and add
+// ==== records and add
 
 export const DEFAULT_FILE = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), 'COSTS.jsonl');
 export const STEPS = ['reading-critique', 'executing-critique', 'draft', 'implement', 'task-review', 'simplify', 'clearing-review', 'other'];
@@ -335,7 +335,7 @@ COMMANDS.add = (argv) => {
   return 0;
 };
 
-// ==== T2: check, similar, table
+// ==== check, similar, table
 
 // Records no later record supersedes.
 function live(records) {
