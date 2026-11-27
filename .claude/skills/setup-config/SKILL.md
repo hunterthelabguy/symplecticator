@@ -507,6 +507,22 @@ is the pass, so say so to the adopter.
   `node --test ~/.claude/scripts/costs.test.mjs`; every test passes. With
   no Node installed, say so: the cost gate then answers "not yet
   measured", and each record is appended by hand as `/build` describes.
+- **`/perturb`'s guard works on this machine:** the guard reads paths the
+  way this machine's shell and disk spell them, so it is checked here too.
+  `bash ~/.claude/scripts/commit-scan.test.sh` must exit 0 and end "all
+  passed". With Node, also `bash ~/.claude/scripts/perturb-hook.test.sh`,
+  which must exit 0 and end "all passed" (without Node one of its checks
+  fails, because the hook then refuses), and
+  `node --test ~/.claude/scripts/perturb-guard.test.mjs` and
+  `node --test ~/.claude/scripts/guard-oracle.test.mjs`, which must pass
+  every test. On Windows run all four from Git Bash, since the guard
+  suites start `bash` and must reach Git Bash's. The last one runs
+  generated commands in this machine's own bash, inside a throwaway
+  folder, and compares what bash did with what the guard said; on Windows
+  it takes a few minutes, so run these in the background as well. Report
+  any failure as it is: until it is fixed, `/perturb` is not to be used
+  on this machine. Without Node, `/perturb` refuses every tool call; say
+  so.
 
 A running session does not reload skills. Ask the adopter to open a new
 session and check that the skills appear.
