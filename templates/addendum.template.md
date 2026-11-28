@@ -18,7 +18,8 @@ Changing facts live here so the charter stays short.
   CLAUDE.md opts in; or on).
 - Config repo: FILL IN (no; or yes, `~/.claude` is a git repo whose top level
   is `~/.claude` itself). Wanted but not set up yet counts as no. When yes,
-  commit each append to `LEDGER.md` or `COSTS.md` at once, that file alone,
+  commit each append to `LEDGER.md` or `COSTS.jsonl` at once, that file alone
+  (the costs script's `add` does this for its file),
   so one session's commit never sweeps in another session's entries.
 
 ## Gates and modifiers

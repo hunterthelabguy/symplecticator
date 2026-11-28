@@ -1,0 +1,3 @@
+# The costs script's default log and its dashboard page, when the script runs from this checkout.
+/COSTS.jsonl
+/costs-dashboard.html

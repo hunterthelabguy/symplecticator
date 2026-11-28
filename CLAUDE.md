@@ -14,11 +14,12 @@ the rest: in setup, "the owner" means you, not the maintainer.
   `node --test scripts/perturb-guard.test.mjs`,
   `bash scripts/perturb-hook.test.sh`,
   `node --test scripts/guard-oracle.test.mjs` (the guard against real
-  bash) and `node --test audit/self-audit.test.mjs`, all green, then
+  bash), `node --test scripts/costs.test.mjs` and
+  `node --test audit/self-audit.test.mjs`, all green, then
   `node audit/self-audit.mjs` with no FAIL line (it checks what the
-  prose says about this repository against its files). CI runs all eight
-  on Linux and macOS with the audit, and the two guard suites
-  (`node --test`) alone on Windows.
+  prose says about this repository against its files). CI runs all nine
+  on Linux and macOS with the audit, and the two guard suites and the
+  costs suite (`node --test`) alone on Windows.
   A check that cannot run here (the jq checks without `gh` signed in, the
   gh-missing case when `gh` cannot be hidden) counts as skipped, not
   passed.

@@ -1,9 +1,9 @@
 # The Symplecticator
 
 [![test](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/hunterthelabguy/symplecticator/actions/workflows/test.yml)
-(the scripts' seven test suites on Ubuntu and macOS, and the two guard
-suites also on Windows; the skills are prose, and an audit checks what
-they name against the files, not what they ask for)
+(the scripts' eight test suites on Ubuntu and macOS, and the two guard
+suites and the costs suite also on Windows; the skills are prose, and an
+audit checks what they name against the files, not what they ask for)
 
 A Claude Code configuration for anyone who writes code with Claude: the
 Symplecticator pipeline (below), plus the skills, commands and setup
@@ -93,9 +93,9 @@ Setup walks you through it, and you should read it yourself too.
 The scripts need bash (Git Bash on Windows, which Claude Code uses anyway),
 git 2.38 or later, and ssh for SSH remotes; their pull-request checks also
 need the GitHub CLI (`gh`), signed in. Setup checks git and `gh`, and runs
-the scripts' tests on your machine. The ledger script needs Node 18.13 or
-later, and `/perturb`'s guard needs Node too (setup checks for it);
-everything else works without Node.
+the scripts' tests on your machine. The ledger and costs scripts need Node
+18.13 or later, and `/perturb`'s guard needs Node too (setup checks for
+it); everything else works without Node, the cost gate included, by hand.
 
 Setup looks at your existing `~/.claude` first, goes through the primer,
 asks four short rounds of questions (any of them can be skipped), shows you
@@ -136,6 +136,7 @@ restore from `~/.claude/setup-backups/`, using the list in
 | `frames` | Generators and checks for the 0 to 2 bets that end a task's report. |
 | Ground truth (`scripts/`) | `ground-truth.sh` prints what is true in your repos right now, read from git and GitHub: pushed or not, merged or not, open pull requests with their CI and clearing-review verdicts. `/handoff` writes its block from it, and the next session runs it first. `/build`'s Stop hook and the optional resume hook rely on the same facts. `commit-scan.sh` refuses a `/perturb` commit that holds a value from your untracked scan list. |
 | Ledger (`scripts/`) | `ledger.mjs` keeps a decision ledger small. An index file beside `LEDGER.md` holds each ruling's status and the open items. The script checks that the two agree, reserves the next ruling number, settles rounds whose pull request has merged, and moves settled rulings to `LEDGER_SETTLED.md` with their text unchanged. `/handoff` runs its check once a ledger has an index: to give yours one, run `node ~/.claude/scripts/ledger.mjs init <prefix>` in the folder that holds `LEDGER.md`, where the prefix is the capital letter or letters your ruling numbers start with (`L` for `L12`). `init` marks every row `unclassified`; the index it writes says what each status means, and you set them by hand. It needs Node 18.13 or later. |
+| Costs (`scripts/`) | `costs.mjs` keeps a log of agent runs in `~/.claude/COSTS.jsonl`, one record per line. `add` validates a record, appends it and commits the log alone; `check` validates the whole log; `similar <step>` prints what that step cost before, which the cost gate quotes; `table` prints runs, tokens, findings and escapes per step for your term review. It only ever appends, so a failed write cannot empty the log. It needs Node 18.13 or later; with no Node, a record is one line of JSON you append by hand from bash or PowerShell 7. "Cost records" below shows the format. |
 | `tdd` | Test-first reference: where tests go, anti-patterns, how thick tests should be. |
 | `diagnosing-bugs` | A feedback-loop-first method for hard bugs. |
 | `verification-before-completion` | No claim of "done" or "passing" without a fresh run. |
@@ -195,6 +196,77 @@ the SOP steps whether or not you adopted charter floor item 8:
 To turn it on, change the addendum's "`/build overnight` enabled" line to
 yes.
 
+## Cost records
+
+If the cost gate is on, `scripts/costs.mjs` keeps `~/.claude/COSTS.jsonl`,
+one JSON record per line: a run record for each agent run, an escape
+record for each escape, and a void record for each record retracted.
+`node ~/.claude/scripts/costs.mjs add --help` lists every key with its
+rule and whether it is required. Five worked examples follow. `add`
+prints the id it made; the first and the fourth keep theirs in a shell
+variable, so the escape names its run, and the void its target, by id:
+
+```sh
+# A fresh run.
+run=$(node ~/.claude/scripts/costs.mjs add --repo demo --step implement --model opus-5.5 --tokens 84238)
+# The same agent resumed: the harness now reports 120,000 in all,
+# so this run added 120000 - 84238 = 35762.
+node ~/.claude/scripts/costs.mjs add --repo demo --step implement --model opus-5.5 --tokens 35762 --resumed --total 120000 --round 2
+# A review, naming the commit it read.
+node ~/.claude/scripts/costs.mjs add --repo demo --step clearing-review --model opus-5.5 --tokens 61200 --read 1a2b3c4 --verdict not-cleared --finding major=2 --finding minor=1
+# An escape, naming the run that passed the defect.
+escape=$(node ~/.claude/scripts/costs.mjs add --kind escape --run "$run" --class miss --found-by "a later review" --note "the lock was kept after a failed commit")
+# A void, retracting a record that should not exist: here, that escape.
+node ~/.claude/scripts/costs.mjs add --kind void --supersedes "$escape" --note "a duplicate of an escape already recorded"
+```
+
+The step is one of eight:
+
+- `reading-critique`: a critique or review that reads and does not build.
+- `executing-critique`: a plan critique that executes the plan in a
+  scratch tree.
+- `draft`: drafting a spec or a plan, or folding critique findings into
+  one.
+- `implement`: a build implementer, a fix round included.
+- `task-review`: a build task review, a re-check included.
+- `simplify`: a simplify pass.
+- `clearing-review`: a clearing review round, a delta round included.
+- `other`: anything else, with `--step-note` saying what.
+
+A review's record (a critique, a task review, a simplify pass, a clearing
+review) names the commit it read. An escape is a defect found after a step
+passed the work that held it: a `miss` if the step's contract covered it,
+a `contract-gap` if not (then fix the skill and add a worked example).
+
+With no Node, append the record by hand as one line of JSON. A key is the
+flag's name without the two hyphens, and two differ: `--resumed` is
+`"resumed":true`, and `--finding major=2` is `"findings":{"major":2}`.
+Give `kind`, `date` and an `id` made of the record's date, a hyphen and
+four hex characters you choose. The fresh run, the escape and the void above, by
+hand:
+
+```json
+{"kind":"run","id":"2030-01-04-9f3c","date":"2030-01-04","repo":"demo","step":"implement","model":"opus-5.5","tokens":84238}
+{"kind":"escape","id":"2030-01-06-4d2e","date":"2030-01-06","run":"2030-01-04-9f3c","class":"miss","found-by":"a later review","note":"the lock was kept after a failed commit"}
+{"kind":"void","id":"2030-01-07-b81a","date":"2030-01-07","supersedes":"2030-01-06-4d2e","note":"a duplicate of an escape already recorded"}
+```
+
+Append by hand only from bash or PowerShell 7: Windows PowerShell 5.1's
+`>>` writes UTF-16, which the script cannot read.
+
+A record is never edited. A wrong one is corrected by a new record with
+`--supersedes <id>`, naming the record that stands. A record that should
+not exist (a run recorded twice, a second correction of one record) is
+retracted by `add --kind void --supersedes <id> --note <why>`: the void
+drops that record and counts as nothing itself. Nothing supersedes a void;
+to undo one, record the run or escape again. Two kinds of line cannot be
+superseded: a line with no usable id (a torn write that is not JSON at
+all, or a line whose id is missing or malformed), and a void that `check`
+reports (one written by hand that names no earlier line, say). `check`
+says so on each such line: delete it by hand, in an editor, before
+committing the file. `node ~/.claude/scripts/costs.mjs check` validates
+the whole log.
+
 ## Per-repo contract
 
 `/handoff`, `/build`, `/reflect` and the planning skills read each project's
@@ -240,8 +312,9 @@ own `CLAUDE.md` for these, and ask when one is missing:
   that the next session starts from. `/build` also leaves one in its pull
   request.
 - **Escape:** a defect found after a step (a critique, a simplify pass, a
-  clearing review) passed the work that held it; logged in `COSTS.md` so
-  each term's review can weigh what each step costs against what it misses.
+  clearing review) passed the work that held it; recorded as an escape
+  record in `COSTS.jsonl` so each term's review can weigh what each step
+  costs against what it misses.
 
 ## Layout
 

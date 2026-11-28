@@ -58,9 +58,10 @@ for Claude's prose.
 its last sentence if the pro-move gate is off. -->
 - **Cost gate:** before any step that spawns agents (an executing critique, a
   clearing review, `/build`, a second or later fixed-point pass), say how
-  many agents and what similar steps cost before (from `COSTS.md` beside this
-  file, or "not yet measured"), and ask: run, lighter, or skip. After each
-  agent finishes, append its token count to `COSTS.md`. A skip needs
+  many agents and what similar steps cost before (the line
+  `node ~/.claude/scripts/costs.mjs similar <step>` prints, or "not yet
+  measured"), and ask: run, lighter, or skip. After each agent finishes,
+  record its run with that script's `add`. A skip needs
   the owner's acknowledgement, quoted where the verification claim lives (a
   skipped clearing review leaves the PR marked uncleared). A repeated skip of
   the same step draws a coaching note. When the pro-move gate's rewrite adds
@@ -135,4 +136,5 @@ this charter changes by ruling, add a one-line pointer here.
 Each term, at its first `/handoff` and at mid-term: which floor items were
 followed and which are dead weight; which skills fired and which are stale;
 how often the pro-move gate fired; tokens spent beside findings caught and
-escapes, per agent step (from `COSTS.md`). A rule nobody uses is not a rule.
+escapes, per agent step (the table `node ~/.claude/scripts/costs.mjs table`
+prints). A rule nobody uses is not a rule.
