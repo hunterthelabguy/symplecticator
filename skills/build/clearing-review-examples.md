@@ -13,7 +13,8 @@ kept.
 The first three entries come from one real run, on 2026-11-12, in a
 repository that is not public, so they name no PR; C5's project name is
 left out too. C4 and C6 are from symplecticator, the repository this
-config comes from. Retire them as your own runs produce entries.
+config comes from. Retire these seeded entries as your own runs produce
+entries.
 
 Format for an entry:
 
@@ -74,7 +75,7 @@ closed it. Lesson: a fix that adds a mode flag to shared code leaves each
 old test pinning only the branch it reaches, so mutate every operand inside
 the new branch.
 
-## C6. Seven rounds on one class, found by probes nobody kept (incorrect, then correct)
+## C6. Seven rounds on one class, found by probes nobody kept (incorrect)
 
 symplecticator PR 13, 2026-11-22 to 2026-11-24, replayed 2026-11-25. The
 diff held a guard that reads a Bash command and decides which folder bash
@@ -95,8 +96,4 @@ a push after `! cd A && cd B`, as new at the commit round 6 read and gone
 at the next, and named round 8's, a write tool handed a path with no
 drive letter, the same way. Lesson: when the code under review predicts what
 another program will do, the first round's deliverable is the generator,
-checked in as a test, and the fix is sized from its output. And a
-generator that harms nothing checks nothing: the first replay's push
-commands all came back harmless, because on Windows the stand-in git was
-not on PATH, so that run had measured pushes not at all. The suite now
-fails when a family of commands does no harm.
+checked in as a test, and the fix is sized from its output.

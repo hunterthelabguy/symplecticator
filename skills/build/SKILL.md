@@ -243,18 +243,19 @@ preflight so that it is the owner's choice and never the controller's.
   is measured for what it stops drawing as well as for what it starts
   drawing.
 - Code that predicts what another program will do (a shell, git, a parser
-  of someone else's format) is checked against that program, not against
-  a reader's model of it. The check is a generator of inputs, each run
-  through the real program in a throwaway folder and through the code,
-  with one invariant stated one way (for a guard: what the program was
-  harmed by, the code refused). Generated inputs that run in a real
-  shell are held inside that folder by construction, with a test that a
-  file in the folder the run was started from survives (the first
-  version of one such generator followed `cd -` out of its sandbox and
-  removed a tracked file). It is a test file in the repository from
-  the task that first needs it, never a script in an agent's scratch
-  folder: a probe that is thrown away is paid for again by the next
-  review, and the review after that (clearing-review example C6).
+  of someone else's format, where one exists to run) is checked against
+  that program, not against a reader's model of it. The check is a
+  generator of inputs, each run through the real program in a throwaway
+  folder and through the code, with one invariant, checked in one
+  direction (for a guard: what the program was harmed by, the code
+  refused). Generated inputs that run in a real shell are held inside
+  that folder by construction, with a test that a file in the folder the
+  run was started from survives (the first version of one such generator
+  followed `cd -` out of its sandbox and removed a tracked file). The
+  generator is a test file in the repository from the task that first
+  needs it, never a script in an agent's scratch folder: a probe that is
+  thrown away is paid for again by the next review, and the review after
+  that (clearing-review example C6).
 - A question to the owner that offers "list it" for an error that escapes
   states the smallest input measured to trigger it, not the input the
   asker has in mind (one such question was asked with 2**32 in mind, and
@@ -349,14 +350,16 @@ it voids it.
      spread into a call's arguments), the fix brief asks first for a parser
      scan of the whole source for that shape, and the fix is sized from the
      scan (found one place at a time, one such fault took three rounds and
-     three commits). When a round's blocker or major is a new input that
-     the same rule in the code decides wrongly, as an earlier round's was
-     (one sentence describes both, as in "the code believed the shell had
-     moved when it had not"; a false claim in the PR body is never such a
-     class), the series is not converging and the next fix is not another
-     instance: the fix round first builds or widens the generator for the
-     class (the oracle rule in section 3), lands it as a test, and sizes the
-     fix from what it finds; attended, it tells the owner so before the fix,
+     three commits). When a round's blocker or major is a new input on
+     which the code gets the same decision wrong as an earlier round's
+     input did (the decision is what the code works out, as in "where the
+     shell will be", and wrong in either direction counts; the check is
+     that one sentence describes both findings; a false claim in the PR
+     body is never such a class), the series is not converging and the
+     next fix is not another instance: the fix round first builds or
+     widens the generator for the class (section 3, the bullet on code
+     that predicts another program), lands it as a test, and sizes the fix
+     from what it finds; attended, it tells the owner so before the fix,
      since the class is then a question about the design. At most three
      rounds, then stop, report, and still do steps 5 to 7 with the PR marked
      uncleared. That round's minor findings and nits are listed for the
@@ -381,8 +384,8 @@ it voids it.
      keeps its grade. Only the owner picks a delta review:
      attended, at the cost gate as "lighter" or by asking for one;
      **[overnight]** every round reads the whole diff. The PR body then
-     says, on a line of its own that names the head, that no single review
-     read the whole of it.
+     says, on a line of its own that names the head and does not start
+     with `Review: `, that no single review read the whole of it.
    - **Record:** each clearing round's COSTS.md entry gives its round
      number, the counts per grade and the leftovers listed; a defect later
      traced to a finding left unfixed, or to code a delta review did not
@@ -392,11 +395,12 @@ it voids it.
    (editing the PR body is not a commit), plus what it caught that the
    simplify pass missed, for the retro line. The ground-truth script and
    the Stop hook read only a line that starts with `Review: ` and ends with
-   `at <sha>`, and the script takes the last such line in the body. So the
-   newest review's line goes last; a delta review names its scope before
-   "at", as in `Review: delta review at <sha>`; and no words follow the
-   commit id. A line that does not fit is not read at all, as if it were
-   absent.
+   `at <sha>`, and the script takes the last such line in the body. So a
+   body holds one such line, the newest review's, and it goes last (a body
+   rewritten whole carries no earlier round's line); a delta review names
+   its scope before "at", as in `Review: delta review at <sha>`; and no
+   words follow the commit id. A line that does not fit is not read at
+   all, as if it were absent.
 5. Link the report in the draft PR, and put the resume block in its body:
    `/handoff` step 4 form, written from the ground-truth script's output at
    the head. Its task is for the next agent: run the ground truth, confirm
